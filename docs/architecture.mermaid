@@ -1,0 +1,44 @@
+flowchart TB
+    subgraph Clients["🌍 Global clients"]
+        B1["Browser — Tokyo"]
+        B2["Browser — Toronto"]
+        B3["Browser — Perth"]
+    end
+
+    subgraph Vercel["▲ Vercel"]
+        EDGE["Edge cache — auction state snapshot
+        (Cache-Control: s-maxage=1)"]
+        AGG["GET /api/auctions/:id/state
+        price params · armed counts · reactions"]
+        VOTE["POST /api/votes — insert-only"]
+        REACT["POST /api/reactions — insert-only"]
+        CLAIM["POST /api/claims
+        guarded UPDATE + atomic ledger settlement"]
+        CRON["Vercel Cron 1–5s
+        rollup writer · floor-lottery draw"]
+    end
+
+    subgraph DSQL["Amazon Aurora DSQL — active-active multi-region, strongly consistent"]
+        RA[("Region A endpoint")]
+        RB[("Region B endpoint")]
+        T["auctions · acts · votes · reactions · claims
+        wallets · ledger_entries · auction_rollups"]
+        RA --- T
+        RB --- T
+    end
+
+    B1 -->|"poll 1s"| EDGE
+    B2 -->|"poll 1s"| EDGE
+    B3 -->|"poll 1s"| EDGE
+    EDGE -->|"~1 req/s per auction on miss"| AGG
+    B1 -->|"intent only"| CLAIM
+    B2 -->|"intent only"| CLAIM
+    B3 -->|"votes / reactions"| VOTE
+    B3 --> REACT
+    AGG --> RA
+    VOTE --> RA
+    REACT --> RA
+    CLAIM --> RA
+    CLAIM -.->|"far-region claims hit nearest endpoint —
+    exactly one commit wins"| RB
+    CRON --> RA
