@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ── */
+@layer base {
+  :root {
+    /* Near-black charcoal background, terminal-dark */
+    --background: 222 18% 7%;
+    --foreground: 210 20% 93%;
+
+    --card: 222 16% 10%;
+    --card-foreground: 210 20% 93%;
+
+    --popover: 222 16% 10%;
+    --popover-foreground: 210 20% 93%;
+
+    /* Electric amber — the single hot accent */
+    --primary: 38 100% 54%;
+    --primary-foreground: 222 18% 7%;
+
+    --secondary: 222 14% 16%;
+    --secondary-foreground: 210 14% 70%;
+
+    --muted: 222 14% 14%;
+    --muted-foreground: 215 12% 50%;
+
+    --accent: 38 100% 54%;
+    --accent-foreground: 222 18% 7%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 222 12% 18%;
+    --input: 222 12% 18%;
+    --ring: 38 100% 54%;
+
+    /* Extended brand tokens */
+    --amber: 38 100% 54%;
+    --amber-foreground: 222 18% 7%;
+    --amber-dim: 38 80% 38%;
+
+    --drop-green: 145 72% 44%;   /* price rising / fully armed */
+    --drop-red: 0 72% 51%;       /* price danger zone */
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply bg-background text-foreground antialiased;
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Tabular numbers for all price / counter displays */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+/* ── Glowing amber border for focused / hot cards ── */
+@layer components {
+  .card-glow {
+    box-shadow: 0 0 0 1px hsl(38 100% 54% / 0.25),
+                0 4px 24px -4px hsl(38 100% 54% / 0.12);
+  }
+
+  .price-glow {
+    text-shadow: 0 0 24px hsl(38 100% 54% / 0.55);
+  }
+
+  /* Horizontal scan-line shimmer for price ticks */
+  .price-shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(38 100% 54% / 0.08) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2.2s linear infinite;
+  }
+
+  /* Live badge pulse ring */
+  .live-ring {
+    box-shadow: 0 0 0 0 hsl(38 100% 54% / 0.5);
+    animation: live-ring 1.4s ease-out infinite;
+  }
+}
+
+@keyframes live-ring {
+  0%   { box-shadow: 0 0 0 0   hsl(38 100% 54% / 0.5); }
+  70%  { box-shadow: 0 0 0 8px hsl(38 100% 54% / 0);   }
+  100% { box-shadow: 0 0 0 0   hsl(38 100% 54% / 0);   }
+}
