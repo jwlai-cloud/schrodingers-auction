@@ -37,7 +37,7 @@ function buildMockAuctions(): { auctions: AuctionSummary[]; serverTimeMs: number
     {
       id: "auc_001",
       title: "Sony WH-1000XM5 Wireless Noise Cancelling Headphones — Midnight Black",
-      imageUrl: null,
+      imageUrl: "/items/wh1000xm5.png",
       status: "live",
       startPrice: 1200,
       reservePrice: 200,
@@ -55,7 +55,7 @@ function buildMockAuctions(): { auctions: AuctionSummary[]; serverTimeMs: number
     {
       id: "auc_002",
       title: "Nintendo Switch OLED — Zelda Limited Edition",
-      imageUrl: null,
+      imageUrl: "/items/switch-oled-zelda.png",
       status: "live",
       startPrice: 800,
       reservePrice: 150,
@@ -73,7 +73,7 @@ function buildMockAuctions(): { auctions: AuctionSummary[]; serverTimeMs: number
     {
       id: "auc_003",
       title: "Apple AirPods Pro (2nd gen) — USB-C with MagSafe Case",
-      imageUrl: null,
+      imageUrl: "/items/airpods-pro-2.png",
       status: "live",
       startPrice: 600,
       reservePrice: 100,
@@ -91,7 +91,7 @@ function buildMockAuctions(): { auctions: AuctionSummary[]; serverTimeMs: number
     {
       id: "auc_004",
       title: "Dyson V15 Detect Absolute Cordless Vacuum",
-      imageUrl: null,
+      imageUrl: "/items/dyson-v15.png",
       status: "live",
       startPrice: 1500,
       reservePrice: 350,
@@ -109,7 +109,7 @@ function buildMockAuctions(): { auctions: AuctionSummary[]; serverTimeMs: number
     {
       id: "auc_005",
       title: "Lego Technic Bugatti Chiron — Factory Sealed",
-      imageUrl: null,
+      imageUrl: "/items/lego-bugatti.png",
       status: "live",
       startPrice: 500,
       reservePrice: 80,
@@ -127,7 +127,7 @@ function buildMockAuctions(): { auctions: AuctionSummary[]; serverTimeMs: number
     {
       id: "auc_006",
       title: "Fujifilm X100VI — Silver, Brand New in Box",
-      imageUrl: null,
+      imageUrl: "/items/fujifilm-x100vi.png",
       status: "live",
       startPrice: 2000,
       reservePrice: 800,

@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { Eye, Shield, Flame } from "lucide-react";
 import { PriceTicker } from "./PriceTicker";
 import { LiveBadge } from "./LiveBadge";
 import { cn } from "@/lib/utils";
+import { computePrice } from "@/lib/price";
 import type { AuctionSummary } from "@/lib/types";
 
 interface AuctionCardProps {
@@ -26,6 +28,20 @@ export function AuctionCard({ auction, clockOffsetMs, priority = false }: Auctio
   const { armed, spectatorsEst, decayParams } = auction;
   const totalArmed = armed.tier3 + armed.tier2 + armed.tier1;
   const burnLabel = BURN_LABEL[decayParams.burnLevel];
+
+  // Live progress (0→1) for the bottom progress bar — remaining, not elapsed
+  const [progress, setProgress] = useState<number>(() => {
+    const r = computePrice(decayParams, Date.now() + clockOffsetMs);
+    return 1 - r.progress;
+  });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const r = computePrice(decayParams, Date.now() + clockOffsetMs);
+      setProgress(1 - r.progress);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [decayParams, clockOffsetMs]);
 
   return (
     <Link
@@ -76,10 +92,7 @@ export function AuctionCard({ auction, clockOffsetMs, priority = false }: Auctio
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-border">
           <div
             className="h-full bg-amber transition-all duration-1000"
-            style={{
-              /* Rough visual: width = remaining fraction of start price */
-              width: "62%",
-            }}
+            style={{ width: `${Math.max(0, Math.min(100, progress * 100)).toFixed(1)}%` }}
             aria-hidden="true"
           />
         </div>
