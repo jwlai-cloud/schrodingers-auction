@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
   for (let i = 0; i < botCount; i++) {
     const name = BOT_NAMES[i % BOT_NAMES.length];
     bots.push({
-      id: `b0t00000-0000-0000-0000-${String(i).padStart(12, "0")}`,
+      id: `b07b0000-0000-4000-8000-${String(i).padStart(12, "0")}`,
       name,
       delayMs: Math.floor(Math.random() * maxDelayMs),
     });
