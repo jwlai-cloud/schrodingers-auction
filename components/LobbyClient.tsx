@@ -23,7 +23,8 @@ interface LobbyClientProps {
 
 export function LobbyClient({ auctions, serverTimeMs }: LobbyClientProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const clockOffsetMs = serverTimeMs - Date.now();
+  // Capture once at mount so a filter re-render can't resync (and freeze) the clock.
+  const [clockOffsetMs] = useState(() => serverTimeMs - Date.now());
 
   const filtered = activeCategory
     ? auctions.filter((a) => a.category === activeCategory)

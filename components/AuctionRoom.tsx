@@ -27,7 +27,10 @@ const BURN_LABEL: Record<number, string | null> = {
 };
 
 export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
-  const clockOffsetMs = serverTimeMs - Date.now();
+  // Capture the server-clock offset ONCE at mount. Computing it inline on every
+  // render would re-pin the effective clock to serverTimeMs each 500ms re-render,
+  // freezing the price (Date.now() + offset collapses back to serverTimeMs).
+  const [clockOffsetMs] = useState(() => serverTimeMs - Date.now());
   const { decayParams, armed, acts } = auction;
   const burnLabel = BURN_LABEL[decayParams.burnLevel];
   const totalArmed = armed.tier3 + armed.tier2 + armed.tier1;
