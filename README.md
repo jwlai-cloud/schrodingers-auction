@@ -13,7 +13,7 @@ A Dutch (falling-price) auction, reinvented. The price of a listed item drops ev
 
 | | |
 |---|---|
-| Live demo | [schrodingers-auction.vercel.app](https://schrodingers-auction.vercel.app) *(or see your Vercel project URL)* |
+| Live demo | [schrodingers-auction.vercel.app](https://schrodingers-auction.vercel.app) |
 | Judge walkthrough | `/demo` — 8-step accordion script, ~10 min full / ~7 min core loop |
 | DB browser | `/admin` — live SELECT queries against Aurora DSQL |
 | Lobby | `/` |
