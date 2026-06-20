@@ -37,10 +37,17 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
   const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => setUser(d.user ?? null))
-      .catch(() => setUser(null));
+    function fetchUser() {
+      fetch("/api/auth/me")
+        .then((r) => r.json())
+        .then((d) => setUser(d.user ?? null))
+        .catch(() => setUser(null));
+    }
+    fetchUser();
+    // Poll every 3s so the claim button updates immediately after sign-in
+    // from the Navbar or any other entry point without needing a full reload.
+    const id = setInterval(fetchUser, 3000);
+    return () => clearInterval(id);
   }, []);
 
   // ── Price / pause state ───────────────────────────────────────────────────

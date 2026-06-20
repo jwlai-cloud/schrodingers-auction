@@ -33,6 +33,9 @@ export function Navbar({ totalWatching = 0, totalArmed = 0 }: NavbarProps) {
 
   useEffect(() => {
     fetchUser();
+    // Re-check auth state every 3s to pick up sign-in from other components
+    const id = setInterval(fetchUser, 3000);
+    return () => clearInterval(id);
   }, []);
 
   async function handleSignOut() {

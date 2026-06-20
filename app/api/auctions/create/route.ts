@@ -11,7 +11,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { query } from "@/lib/db";
-import { actsToPauseWindows } from "@/lib/price";
+
 import { randomUUID } from "crypto";
 
 export interface CreateAuctionRequest {
@@ -50,26 +50,26 @@ export async function POST(req: Request) {
 
   const auctionId = randomUUID();
   const durationS = durationMinutes * 60;
-  const pauseWindows = actsToPauseWindows([
-    Math.floor(durationS * 0.25),
-    Math.floor(durationS * 0.5),
-    Math.floor(durationS * 0.75),
-  ]);
-
+  // Pause windows: one 30-second pause per act boundary
+  const pauseWindows = [
+    { startS: Math.floor(durationS * 0.25), durationS: 30 },
+    { startS: Math.floor(durationS * 0.5),  durationS: 30 },
+    { startS: Math.floor(durationS * 0.75), durationS: 30 },
+  ];
   // Attempt DB write — gracefully degrade to mock if DB is unavailable
   try {
     await query(
       `INSERT INTO auctions (
-        id, seller_id, title, description, category,
+        id, seller_user_id, title, description, category,
         start_price, reserve_price, duration_s,
-        pause_windows, status, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'listed',NOW())`,
+        pause_windows, curve, burn_level, status
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'linear',0,'listed')`,
       [
         auctionId,
-        session.userId,
+        session.id,
         title.trim(),
         description?.trim() ?? "",
-        category,
+        category ?? "Other",
         startPrice,
         reservePrice,
         durationS,
@@ -77,12 +77,19 @@ export async function POST(req: Request) {
       ]
     );
 
-    // Write act highlights
+    // Write act highlights to the acts table (schema: id, auction_id, act_no, headline, detail, reveal_offset_s)
     for (const act of acts) {
       await query(
-        `INSERT INTO auction_acts (auction_id, act_no, headline, detail) VALUES ($1,$2,$3,$4)
-         ON CONFLICT (auction_id, act_no) DO UPDATE SET headline=EXCLUDED.headline, detail=EXCLUDED.detail`,
-        [auctionId, act.actNo, act.headline, act.detail ?? ""]
+        `INSERT INTO acts (id, auction_id, act_no, headline, detail, reveal_offset_s)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+         ON CONFLICT (auction_id, act_no) DO UPDATE SET headline=EXCLUDED.headline`,
+        [
+          auctionId,
+          act.actNo,
+          act.headline,
+          act.detail ?? "",
+          Math.floor(durationS * (act.actNo / 4)),
+        ]
       );
     }
   } catch (err) {
