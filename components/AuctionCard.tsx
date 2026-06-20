@@ -29,17 +29,16 @@ export function AuctionCard({ auction, clockOffsetMs, priority = false }: Auctio
   const totalArmed = armed.tier3 + armed.tier2 + armed.tier1;
   const burnLabel = BURN_LABEL[decayParams.burnLevel];
 
-  // Live progress (0→1) for the bottom progress bar — remaining, not elapsed
-  const [progress, setProgress] = useState<number>(() => {
-    const r = computePrice(decayParams, Date.now() + clockOffsetMs);
-    return 1 - r.progress;
-  });
+  // Initialize to null so SSR and client first render agree — no Date.now() on server.
+  const [progress, setProgress] = useState<number | null>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    function update() {
       const r = computePrice(decayParams, Date.now() + clockOffsetMs);
       setProgress(1 - r.progress);
-    }, 1000);
+    }
+    update();
+    const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, [decayParams, clockOffsetMs]);
 
@@ -92,7 +91,7 @@ export function AuctionCard({ auction, clockOffsetMs, priority = false }: Auctio
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-border">
           <div
             className="h-full bg-amber transition-all duration-1000"
-            style={{ width: `${Math.max(0, Math.min(100, progress * 100)).toFixed(1)}%` }}
+            style={{ width: progress !== null ? `${Math.max(0, Math.min(100, progress * 100)).toFixed(1)}%` : "100%" }}
             aria-hidden="true"
           />
         </div>

@@ -19,22 +19,20 @@ export function PriceTicker({
   className,
   compact = false,
 }: PriceTickerProps) {
-  const [price, setPrice] = useState<number>(() => {
-    const { price } = computePrice(decayParams, Date.now() + clockOffsetMs);
-    return price;
-  });
+  // Initialize to null so SSR and the first client render agree (no Date.now() on server).
+  const [price, setPrice] = useState<number | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [atFloor, setAtFloor] = useState(false);
-  const [tick, setTick] = useState(0); // incremented on each price change to trigger animation
-  const prevPriceRef = useRef(price);
+  const [tick, setTick] = useState(0);
+  const prevPriceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    function tick() {
       const serverNow = Date.now() + clockOffsetMs;
       const result = computePrice(decayParams, serverNow);
 
       setPrice((prev) => {
-        if (prev !== result.price) {
+        if (prev !== null && prev !== result.price) {
           prevPriceRef.current = prev;
           setTick((t) => t + 1);
         }
@@ -42,12 +40,16 @@ export function PriceTicker({
       });
       setIsPaused(result.isPaused);
       setAtFloor(result.atFloor);
-    }, 500);
+    }
 
+    // Fire immediately on mount so the price shows without waiting 500 ms.
+    tick();
+    const interval = setInterval(tick, 500);
     return () => clearInterval(interval);
   }, [decayParams, clockOffsetMs]);
 
-  const formatted = price.toLocaleString("en-US");
+  // price is null until first useEffect fires on the client — render a stable placeholder.
+  const formatted = price !== null ? price.toLocaleString("en-US") : "—";
 
   return (
     <div className={cn("flex flex-col gap-0.5", className)}>
@@ -58,12 +60,14 @@ export function PriceTicker({
             "font-mono font-bold tabular",
             "transition-all duration-150",
             compact ? "text-2xl" : "text-4xl md:text-5xl",
-            isPaused
+            price === null
+              ? "text-muted-foreground"
+              : isPaused
               ? "text-muted-foreground"
               : atFloor
               ? "text-drop-green"
               : "text-amber price-glow",
-            !isPaused && !atFloor && "animate-tick-down"
+            price !== null && !isPaused && !atFloor && "animate-tick-down"
           )}
         >
           {formatted}
