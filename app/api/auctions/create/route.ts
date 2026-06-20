@@ -58,12 +58,14 @@ export async function POST(req: Request) {
   ];
   // Attempt DB write — gracefully degrade to mock if DB is unavailable
   try {
+    // starts_at is required (NOT NULL, no default). New listings are queued for
+    // scheduling; we set it to NOW() as a placeholder — an admin can reschedule later.
     await query(
       `INSERT INTO auctions (
         id, seller_user_id, title, description, category,
         start_price, reserve_price, duration_s,
-        pause_windows, curve, burn_level, status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'linear',0,'listed')`,
+        pause_windows, curve, burn_level, status, starts_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'linear',0,'listed', NOW())`,
       [
         auctionId,
         session.id,
@@ -77,12 +79,12 @@ export async function POST(req: Request) {
       ]
     );
 
-    // Write act highlights to the acts table (schema: id, auction_id, act_no, headline, detail, reveal_offset_s)
+    // Write act highlights — plain INSERT, no ON CONFLICT needed for new auctions.
+    // Aurora DSQL does not support ON CONFLICT DO UPDATE on non-PK unique indexes.
     for (const act of acts) {
       await query(
         `INSERT INTO acts (id, auction_id, act_no, headline, detail, reveal_offset_s)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
-         ON CONFLICT (auction_id, act_no) DO UPDATE SET headline=EXCLUDED.headline`,
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
         [
           auctionId,
           act.actNo,

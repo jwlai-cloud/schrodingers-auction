@@ -33,7 +33,7 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
   const totalArmed = armed.tier3 + armed.tier2 + armed.tier1;
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  const [user, setUser] = useState<{ displayName: string; balance: number } | null>(null);
+  const [user, setUser] = useState<{ id: string; displayName: string; balance: number } | null>(null);
   const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
@@ -75,9 +75,28 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
     return idx >= 0 ? ((idx + 1) as 1 | 2 | 3) : null;
   })();
 
-  // ── Votes (local for demo) ────────────────────────────────────────────────
+  // ── Votes — real API with local-state optimistic increment ───────────────
   const [votes, setVotes] = useState(0);
   const tier = votesToTier(votes);
+
+  async function castVote(actNo: 1 | 2 | 3) {
+    if (!user) { setShowAuth(true); return; }
+    // Optimistic update
+    setVotes((v) => Math.min(3, v + 1));
+    try {
+      await fetch("/api/votes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+        body: JSON.stringify({ auctionId: auction.id, actNo }),
+      });
+    } catch {
+      // Roll back on network error
+      setVotes((v) => Math.max(0, v - 1));
+    }
+  }
   const claimDelay = tierDelaySeconds(tier);
 
   // ── Claim ─────────────────────────────────────────────────────────────────
@@ -94,11 +113,13 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
     setFinalPrice(price);
 
     if (claimDelay === 0) {
+      // Instant — fire immediately
       setClaimState("submitting");
-      setTimeout(() => setClaimState(Math.random() < 0.75 ? "won" : "lost"), 700);
+      submitClaim();
       return;
     }
 
+    // Countdown, then fire
     setClaimCountdown(claimDelay);
     setClaimState("countdown");
     let remaining = claimDelay;
@@ -108,9 +129,33 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
       if (remaining <= 0) {
         clearInterval(intervalRef.current!);
         setClaimState("submitting");
-        setTimeout(() => setClaimState(Math.random() < 0.75 ? "won" : "lost"), 700);
+        submitClaim();
       }
     }, 1000);
+  }
+
+  async function submitClaim() {
+    if (!user) return;
+    const idempotencyKey = crypto.randomUUID();
+    try {
+      const res = await fetch("/api/claims", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+        body: JSON.stringify({ auctionId: auction.id, idempotencyKey }),
+      });
+      const data = await res.json();
+      if (res.ok && data.result === "won") {
+        setFinalPrice(data.serverPrice ?? finalPrice);
+        setClaimState("won");
+      } else {
+        setClaimState("lost");
+      }
+    } catch {
+      setClaimState("lost");
+    }
   }
 
   function resetClaim() {
@@ -336,7 +381,7 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
                 )}
                 {votes < activeActNo ? (
                   <button
-                    onClick={() => setVotes((v) => Math.min(3, v + 1))}
+                    onClick={() => castVote(activeActNo)}
                     className="mt-3 flex items-center gap-2 px-4 py-2 rounded-md bg-amber text-amber-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
                   >
                     <Shield className="w-4 h-4" aria-hidden="true" />
@@ -398,13 +443,13 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
                 {tier === 2 && "2 votes — 2s delay on claim. One more."}
                 {tier === 3 && "3 votes — instant claim. You are fully armed."}
               </p>
-              {/* Demo vote button (usable any time) */}
+              {/* Demo vote button (usable any time — calls real API) */}
               {votes < 3 && (
                 <button
-                  onClick={() => setVotes((v) => Math.min(3, v + 1))}
+                  onClick={() => castVote(([1, 2, 3] as const)[votes])}
                   className="mt-3 w-full text-xs text-muted-foreground border border-border rounded-md py-2 hover:text-foreground hover:border-amber/30 transition-colors font-mono"
                 >
-                  Demo: simulate vote ({votes}/3)
+                  Vote for Act {votes + 1} ({votes}/3)
                 </button>
               )}
             </div>
