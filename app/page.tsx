@@ -7,6 +7,11 @@ import { actsToPauseWindows } from "@/lib/price";
 import type { AuctionSummary } from "@/lib/types";
 import { Navbar } from "@/components/Navbar";
 import { LobbyClient } from "@/components/LobbyClient";
+import { fetchLiveAuctions } from "@/lib/auctions";
+
+// Dynamic so serverTimeMs (and the DB read) are fresh per request — a cached
+// lobby would hand the client a stale clock and mis-compute the falling price.
+export const dynamic = "force-dynamic";
 
 function buildMockAuctions(): { auctions: AuctionSummary[]; serverTimeMs: number } {
   const now = Date.now();
@@ -123,8 +128,10 @@ function buildMockAuctions(): { auctions: AuctionSummary[]; serverTimeMs: number
   return { auctions, serverTimeMs: now };
 }
 
-export default function LobbyPage() {
-  const { auctions, serverTimeMs } = buildMockAuctions();
+export default async function LobbyPage() {
+  // Real DB auctions (fixed starts_at → price holds across refresh); mock fallback.
+  const now = Date.now();
+  const { auctions, serverTimeMs } = (await fetchLiveAuctions(now)) ?? buildMockAuctions();
 
   const totalArmed  = auctions.reduce((s, a) => s + a.armed.tier3 + a.armed.tier2 + a.armed.tier1, 0);
   const totalWatching = auctions.reduce((s, a) => s + a.spectatorsEst, 0);

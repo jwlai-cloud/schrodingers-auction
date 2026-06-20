@@ -12,6 +12,7 @@ import { actsToPauseWindows } from "@/lib/price";
 import type { AuctionSummary } from "@/lib/types";
 import { AuctionRoom } from "@/components/AuctionRoom";
 import { Navbar } from "@/components/Navbar";
+import { fetchAuctionWithActs } from "@/lib/auctions";
 
 export interface AuctionWithActs extends AuctionSummary {
   acts: { actNo: 1 | 2 | 3; headline: string; detail: string }[];
@@ -172,7 +173,9 @@ export async function generateMetadata({ params }: PageProps) {
 
 export default async function AuctionPage({ params }: PageProps) {
   const { id } = await params;
-  const auction = buildMockAuction(id);
+  // Real DB auction (fixed starts_at → consistent price); mock fallback for demo.
+  const now = Date.now();
+  const auction = (await fetchAuctionWithActs(id, now)) ?? buildMockAuction(id);
   if (!auction) notFound();
 
   return (
