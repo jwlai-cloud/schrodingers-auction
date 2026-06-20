@@ -1,143 +1,111 @@
 /**
  * app/page.tsx — Lobby / gallery of live auctions.
- *
- * Server component: fetches mock auction list, passes serverTimeMs down to
- * client components so they can derive the clock offset for local price rendering.
- *
- * TODO (Days 12–13): Replace MOCK_AUCTIONS with a real fetch to /api/auctions
- * (or direct DSQL query) and add the seed script for demo listings.
+ * Server component: builds mock auctions, passes serverTimeMs to client components.
  */
 
-import { Zap, Trophy, ShoppingBag } from "lucide-react";
+import Link from "next/link";
+import { Zap, Shield, Trophy, Tag, Tv, Gamepad2, Home, Camera, Package } from "lucide-react";
 import { AuctionCard } from "@/components/AuctionCard";
+import { Navbar } from "@/components/Navbar";
+import { FeaturedAuction } from "@/components/FeaturedAuction";
 import type { AuctionSummary } from "@/lib/types";
 import { actsToPauseWindows } from "@/lib/price";
 
-// ── Mock data ────────────────────────────────────────────────────────────────
+// ── Mock data ─────────────────────────────────────────────────────────────────
 
 function buildMockAuctions(): { auctions: AuctionSummary[]; serverTimeMs: number } {
   const now = Date.now();
 
-  const base = (offset: number, durationS: number): AuctionSummary["decayParams"] => ({
+  const base = (offset: number, durationS: number, startPrice: number, reservePrice: number) => ({
     startsAtMs: now - offset,
     durationS,
-    startPrice: 0, // overridden per auction below
-    reservePrice: 0,
-    curve: "linear",
+    startPrice,
+    reservePrice,
+    curve: "linear" as const,
     pauseWindows: actsToPauseWindows([
       Math.floor(durationS * 0.25),
       Math.floor(durationS * 0.5),
       Math.floor(durationS * 0.75),
     ]),
-    burnLevel: 0,
+    burnLevel: 0 as const,
     burnEffectiveAtMs: null,
   });
 
   const auctions: AuctionSummary[] = [
     {
-      id: "auc_001",
-      title: "Sony WH-1000XM5 Wireless Noise Cancelling Headphones — Midnight Black",
+      id: "11111111-0000-0000-0000-000000000001",
+      title: "Sony WH-1000XM5 Wireless Headphones",
       imageUrl: "/items/wh1000xm5.png",
+      category: "Electronics",
       status: "live",
       startPrice: 1200,
       reservePrice: 200,
-      decayParams: {
-        ...base(4 * 60 * 1000, 15 * 60),
-        startPrice: 1200,
-        reservePrice: 200,
-        burnLevel: 1,
-        burnEffectiveAtMs: now - 90_000,
-      },
+      decayParams: { ...base(4 * 60_000, 15 * 60, 1200, 200), burnLevel: 1, burnEffectiveAtMs: now - 90_000 },
       armed: { tier3: 31, tier2: 14, tier1: 9 },
       spectatorsEst: 2341,
       serverTimeMs: now,
     },
     {
-      id: "auc_002",
+      id: "11111111-0000-0000-0000-000000000002",
       title: "Nintendo Switch OLED — Zelda Limited Edition",
       imageUrl: "/items/switch-oled-zelda.png",
+      category: "Gaming",
       status: "live",
       startPrice: 800,
       reservePrice: 150,
-      decayParams: {
-        ...base(2 * 60 * 1000, 12 * 60),
-        startPrice: 800,
-        reservePrice: 150,
-        burnLevel: 2,
-        burnEffectiveAtMs: now - 45_000,
-      },
+      decayParams: { ...base(2 * 60_000, 12 * 60, 800, 150), burnLevel: 2, burnEffectiveAtMs: now - 45_000 },
       armed: { tier3: 58, tier2: 21, tier1: 13 },
       spectatorsEst: 4109,
       serverTimeMs: now,
     },
     {
-      id: "auc_003",
-      title: "Apple AirPods Pro (2nd gen) — USB-C with MagSafe Case",
+      id: "11111111-0000-0000-0000-000000000003",
+      title: "Apple AirPods Pro (2nd gen) — USB-C",
       imageUrl: "/items/airpods-pro-2.png",
+      category: "Electronics",
       status: "live",
       startPrice: 600,
       reservePrice: 100,
-      decayParams: {
-        ...base(7 * 60 * 1000, 18 * 60),
-        startPrice: 600,
-        reservePrice: 100,
-        burnLevel: 0,
-        burnEffectiveAtMs: null,
-      },
+      decayParams: base(7 * 60_000, 18 * 60, 600, 100),
       armed: { tier3: 12, tier2: 7, tier1: 5 },
       spectatorsEst: 873,
       serverTimeMs: now,
     },
     {
-      id: "auc_004",
+      id: "11111111-0000-0000-0000-000000000004",
       title: "Dyson V15 Detect Absolute Cordless Vacuum",
       imageUrl: "/items/dyson-v15.png",
+      category: "Home",
       status: "live",
       startPrice: 1500,
       reservePrice: 350,
-      decayParams: {
-        ...base(1 * 60 * 1000, 20 * 60),
-        startPrice: 1500,
-        reservePrice: 350,
-        burnLevel: 0,
-        burnEffectiveAtMs: null,
-      },
+      decayParams: base(1 * 60_000, 20 * 60, 1500, 350),
       armed: { tier3: 4, tier2: 9, tier1: 18 },
       spectatorsEst: 1204,
       serverTimeMs: now,
     },
     {
-      id: "auc_005",
+      id: "11111111-0000-0000-0000-000000000005",
       title: "Lego Technic Bugatti Chiron — Factory Sealed",
       imageUrl: "/items/lego-bugatti.png",
+      category: "Collectibles",
       status: "live",
       startPrice: 500,
       reservePrice: 80,
-      decayParams: {
-        ...base(9 * 60 * 1000, 14 * 60),
-        startPrice: 500,
-        reservePrice: 80,
-        burnLevel: 3,
-        burnEffectiveAtMs: now - 120_000,
-      },
+      decayParams: { ...base(9 * 60_000, 14 * 60, 500, 80), burnLevel: 3, burnEffectiveAtMs: now - 120_000 },
       armed: { tier3: 77, tier2: 28, tier1: 11 },
       spectatorsEst: 6750,
       serverTimeMs: now,
     },
     {
-      id: "auc_006",
+      id: "11111111-0000-0000-0000-000000000006",
       title: "Fujifilm X100VI — Silver, Brand New in Box",
       imageUrl: "/items/fujifilm-x100vi.png",
+      category: "Photography",
       status: "live",
       startPrice: 2000,
       reservePrice: 800,
-      decayParams: {
-        ...base(30_000, 25 * 60),
-        startPrice: 2000,
-        reservePrice: 800,
-        burnLevel: 0,
-        burnEffectiveAtMs: null,
-      },
+      decayParams: base(30_000, 25 * 60, 2000, 800),
       armed: { tier3: 2, tier2: 4, tier1: 11 },
       spectatorsEst: 542,
       serverTimeMs: now,
@@ -147,73 +115,69 @@ function buildMockAuctions(): { auctions: AuctionSummary[]; serverTimeMs: number
   return { auctions, serverTimeMs: now };
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+const CATEGORIES = [
+  { label: "All", icon: Tag, filter: null },
+  { label: "Electronics", icon: Tv, filter: "Electronics" },
+  { label: "Gaming", icon: Gamepad2, filter: "Gaming" },
+  { label: "Home", icon: Home, filter: "Home" },
+  { label: "Photography", icon: Camera, filter: "Photography" },
+  { label: "Collectibles", icon: Package, filter: "Collectibles" },
+];
 
-export default function LobbyPage() {
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function LobbyPage({
+  searchParams,
+}: {
+  searchParams?: { category?: string };
+}) {
   const { auctions, serverTimeMs } = buildMockAuctions();
-
-  // Client will compute clockOffsetMs = serverTimeMs - Date.now() on mount.
-  // We pass serverTimeMs as a data attribute so the client has it.
-  // For SSR rendering, offset is 0 (close enough for initial paint).
   const clockOffsetMs = 0;
 
-  const totalArmed = auctions.reduce(
-    (sum, a) => sum + a.armed.tier3 + a.armed.tier2 + a.armed.tier1,
-    0
-  );
-  const totalWatching = auctions.reduce((sum, a) => sum + a.spectatorsEst, 0);
+  const activeCategory = searchParams?.category ?? null;
+  const filtered = activeCategory
+    ? auctions.filter((a) => a.category === activeCategory)
+    : auctions;
+
+  // Featured = highest spectator count (most exciting for demo)
+  const featured = [...auctions].sort((a, b) => b.spectatorsEst - a.spectatorsEst)[0];
+
+  const totalArmed = auctions.reduce((s, a) => s + a.armed.tier3 + a.armed.tier2 + a.armed.tier1, 0);
+  const totalWatching = auctions.reduce((s, a) => s + a.spectatorsEst, 0);
 
   return (
     <div className="min-h-screen bg-background">
-      {/* ── Header ──────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
-        <div className="container mx-auto flex items-center justify-between h-14 px-4">
-          {/* Wordmark */}
-          <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-amber text-lg tracking-tight">
-              Schrödinger
-            </span>
-            <span className="font-sans font-light text-muted-foreground text-sm hidden sm:block">
-              / auction
-            </span>
-          </div>
-
-          {/* Global live stats */}
-          <div className="flex items-center gap-4 text-xs font-mono text-muted-foreground">
-            <span className="hidden sm:flex items-center gap-1.5">
-              <Eye className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="tabular">{totalWatching.toLocaleString()}</span>
-              <span className="sr-only">watching globally</span>
-            </span>
-            <span className="flex items-center gap-1.5 text-amber">
-              <Shield className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="tabular">{totalArmed.toLocaleString()}</span>
-              <span className="hidden sm:inline">armed</span>
-              <span className="sr-only">armed bidders globally</span>
-            </span>
-            <button className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-amber/30 text-amber hover:bg-amber/10 transition-colors text-xs font-semibold">
-              Sign in
-            </button>
-          </div>
-        </div>
-      </header>
+      <Navbar totalWatching={totalWatching} totalArmed={totalArmed} />
 
       {/* ── Hero strip ──────────────────────────────────────── */}
-      <section className="border-b border-border py-10 md:py-16">
-        <div className="container mx-auto px-4 flex flex-col md:flex-row items-start md:items-center gap-6 md:gap-12">
+      <section className="border-b border-border py-10 md:py-14">
+        <div className="container mx-auto px-4 flex flex-col md:flex-row items-start md:items-center gap-8 md:gap-12">
           <div className="flex-1 min-w-0">
             <p className="font-mono text-xs tracking-widest uppercase text-amber mb-3">
               Dutch auction — live globally
             </p>
             <h1 className="font-sans font-bold text-3xl md:text-5xl text-foreground leading-tight text-balance">
-              The price falls.
-              <br />
+              The price falls.{" "}
               <span className="text-amber">One person claims it.</span>
             </h1>
             <p className="mt-4 text-muted-foreground text-sm md:text-base leading-relaxed max-w-md text-pretty">
-              Watch the room. Arm yourself with votes. The moment feels right —
-              claim before anyone else on the planet does.
+              Watch the room. Arm yourself with votes. When the moment feels right —
+              claim before anyone else on the planet.
             </p>
+            <div className="flex items-center gap-3 mt-6 flex-wrap">
+              <Link
+                href="/sell"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-amber text-amber-foreground font-semibold text-sm hover:opacity-90 transition-opacity"
+              >
+                List an item
+              </Link>
+              <Link
+                href="/demo"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors text-sm"
+              >
+                How it works
+              </Link>
+            </div>
           </div>
 
           {/* How-it-works chips */}
@@ -232,13 +196,48 @@ export default function LobbyPage() {
         </div>
       </section>
 
+      {/* ── Featured hot auction ─────────────────────────────── */}
+      <section className="border-b border-border py-8">
+        <div className="container mx-auto px-4">
+          <p className="font-mono text-xs tracking-widest uppercase text-amber mb-4">
+            Hottest right now
+          </p>
+          <FeaturedAuction auction={featured} clockOffsetMs={clockOffsetMs} />
+        </div>
+      </section>
+
+      {/* ── Category filter bar ──────────────────────────────── */}
+      <div className="border-b border-border sticky top-14 z-30 bg-background/95 backdrop-blur-sm">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center gap-1 overflow-x-auto py-3 scrollbar-none">
+            {CATEGORIES.map(({ label, icon: Icon, filter }) => {
+              const isActive = (filter === null && !activeCategory) || filter === activeCategory;
+              return (
+                <Link
+                  key={label}
+                  href={filter ? `/?category=${filter}` : "/"}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
+                    isActive
+                      ? "bg-amber text-amber-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* ── Live auction gallery ─────────────────────────────── */}
-      <main className="container mx-auto px-4 py-8 md:py-12">
+      <main className="container mx-auto px-4 py-8 md:py-10">
         <div className="flex items-center justify-between mb-6">
           <h2 className="font-sans font-semibold text-foreground text-lg">
             Live now
             <span className="ml-2 font-mono text-sm text-muted-foreground font-normal">
-              {auctions.length} auctions
+              {filtered.length} {activeCategory ? `in ${activeCategory}` : "auctions"}
             </span>
           </h2>
           <p
@@ -250,63 +249,31 @@ export default function LobbyPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-          {auctions.map((auction, i) => (
-            <AuctionCard
-              key={auction.id}
-              auction={auction}
-              clockOffsetMs={clockOffsetMs}
-              priority={i < 3}
-            />
-          ))}
-        </div>
+        {filtered.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground text-sm">
+            No live auctions in this category right now.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {filtered.map((auction, i) => (
+              <AuctionCard
+                key={auction.id}
+                auction={auction}
+                clockOffsetMs={clockOffsetMs}
+                priority={i < 3}
+              />
+            ))}
+          </div>
+        )}
       </main>
 
       {/* ── Footer ──────────────────────────────────────────── */}
-      <footer className="border-t border-border mt-16 py-8">
+      <footer className="border-t border-border mt-12 py-8">
         <div className="container mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground font-mono">
-          <span>Schrödinger&apos;s Auction — demo build</span>
+          <span>Schrodinger&apos;s Auction — demo build</span>
           <span>One price, everywhere. One winner, ever.</span>
         </div>
       </footer>
     </div>
-  );
-}
-
-// Inline icon used in the header only — keeps dependency minimal
-function Eye({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function Shield({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    </svg>
   );
 }

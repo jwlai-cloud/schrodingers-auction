@@ -179,6 +179,7 @@ export interface AuctionSummary {
   id: string;
   title: string;
   imageUrl: string | null;
+  category: string;
   status: AuctionStatus;
   startPrice: number;
   reservePrice: number;
