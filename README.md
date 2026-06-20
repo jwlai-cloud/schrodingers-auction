@@ -2,97 +2,199 @@
 
 **The falling-price drop platform where the whole world is in the room.**
 
-A Dutch (falling-price) auction, reinvented: the price drops every second, globally synchronized.
-Anyone on Earth can claim — but only one person ever does. Until that moment, every spectator,
-every armed bidder, every emoji burst is visible to everyone, everywhere, in real time.
+A Dutch (falling-price) auction, reinvented. The price of a listed item drops every second, globally synchronized — every viewer on Earth sees the same number. Anyone can claim the item, but only one person ever does. Until that moment, every spectator, every armed bidder, every emoji burst is visible to everyone, everywhere.
 
-> 🏆 Built for **H0: Hack the Zero Stack** (Vercel v0 + AWS Databases) — Track 1: Monetizable B2C.
-> Database: **Amazon Aurora DSQL** · Frontend: **Next.js via v0, deployed on Vercel**
+> Built for **H0: Hack the Zero Stack** (Vercel v0 + AWS Databases) — Track 1: Monetizable B2C.
+> Database: **Amazon Aurora DSQL** — Next.js via v0, deployed on Vercel.
+
+---
+
+## Quick links
+
+| | |
+|---|---|
+| Live demo | [schrodingers-auction.vercel.app](https://schrodingers-auction.vercel.app) *(or see your Vercel project URL)* |
+| Judge walkthrough | `/demo` — 8-step accordion script, ~10 min full / ~7 min core loop |
+| DB browser | `/admin` — live SELECT queries against Aurora DSQL |
+| Lobby | `/` |
+| Sell | `/sell` |
 
 ---
 
 ## The one-line insight
 
-Classic Dutch auctions are *informationally dead* — nothing happens until the single moment
-something happens. The century-old Dutch flower clock auctions work because buyers sit in one
-room and **see each other**. We rebuilt that room at planetary scale:
+Classic Dutch auctions are *informationally dead* — nothing happens until the single moment something happens. The century-old Dutch flower clock auctions work because buyers sit in one room and **see each other**. We rebuilt that room at planetary scale:
 
-- **Visible armed demand** — a strongly consistent, global count of bidders who have earned
-  the right to claim. Not eventually-consistent mush: one number, true everywhere.
-- **Exactly one winner** — claims from Tokyo and Toronto in the same millisecond resolve to
-  one owner, guaranteed by a single atomic transaction in Aurora DSQL.
-- **Engagement priced in attention, not money** — bidders *earn* claim rights by watching
-  the seller's highlight reveals (no pay-to-bid; this is not a penny auction).
+- **Visible armed demand** — a strongly consistent, global count of bidders who have earned the right to claim. Not eventually-consistent mush: one number, true everywhere.
+- **Exactly one winner** — claims from Tokyo and Toronto in the same millisecond resolve to one owner, guaranteed by a single atomic `UPDATE ... WHERE winner_user_id IS NULL` in Aurora DSQL.
+- **Engagement priced in attention, not money** — bidders *earn* claim rights by watching the seller's highlight reveals. This is not a penny auction.
 
-**Why this is a business:** visible armed demand creates price pressure → buyers claim earlier
-and higher → sellers earn more → the platform's spread fee grows. Engagement and revenue are
-the same lever.
+**Why this is a business:** visible armed demand creates price pressure → buyers claim earlier and higher → sellers earn more → the platform's spread fee grows. Engagement and revenue are the same lever.
 
-## How to play (30-second version)
+---
 
-1. **Watch** — an item's price falls every second, worldwide. Everyone sees the same price.
-2. **Arm** — the seller reveals 3 highlights during the countdown ("acts"). Vote on each one
-   you witness. 3 votes = fully armed = instant-claim rights. Fewer votes = claim with a delay.
-3. **Claim** — hit the button before anyone else on the planet. One atomic transaction decides.
-4. **Floor lottery** — if no one claims before the seller's reserve price, the item goes to a
-   random fully-armed bidder who opted in at floor price. The seller always sells.
+## How to play
+
+1. **Watch** — an item's price falls every second, worldwide. Everyone sees the same price at all times.
+2. **Arm** — the seller reveals 3 highlights during the countdown ("acts"). Vote on each one you witness. 3 votes = fully armed = instant-claim rights. Fewer votes = delayed claim.
+3. **Claim** — press the button before anyone else on the planet. One atomic transaction decides the winner.
+4. **Floor lottery** — if no one claims before the reserve price, the item goes to a random fully-armed bidder who opted in. The seller always sells.
 
 Full rules: [docs/HOW_TO_PLAY.md](docs/HOW_TO_PLAY.md)
 
-## Revenue model
+---
 
-| Fee | Amount | Paid by | When |
-|---|---|---|---|
-| Listing fee | flat (e.g. 20 coins) | Seller | At listing, win or lose |
-| Base commission | 5% of sale price | Seller | At settlement |
-| Spread bonus | 10% of (sale price − reserve) | Seller | At settlement |
+## Running locally
 
-The spread bonus aligns the platform with the seller: our engagement mechanics exist to push
-the claim *earlier on the price curve*, which is exactly what makes sellers richer.
+```bash
+git clone https://github.com/jwlai-cloud/schrodingers-auction
+cd schrodingers-auction
+pnpm install
+```
 
-Demo economy uses **coins** (every account is seeded at signup). Production path: wallet
-top-ups via Stripe Connect; the double-entry ledger design is unchanged.
+Create `.env.development.local` with your Aurora DSQL credentials (see [Vercel → Settings → Vars]):
 
-## Stack
+```
+AURORA_DSQL_ENDPOINT=<your-cluster-endpoint>
+AURORA_DSQL_REGION=<region>
+AUTH_SECRET=<random-32-char-string>
+```
 
-| Layer | Tech | Why |
-|---|---|---|
-| Frontend | Next.js (scaffolded with v0), Tailwind, deployed on Vercel | The hackathon stack |
-| Realtime feel | 1-second polling of edge-cached aggregates (`s-maxage=1`) | A million viewers hit Vercel's cache, not the database |
-| Database | **Amazon Aurora DSQL** | Active-active multi-region, strongly consistent SQL, serverless — the claim's fairness guarantee *is* the product |
-| Price ticker | Pure client-side function of auction params + server clock offset | The price never touches the database |
+```bash
+pnpm dev            # starts on http://localhost:3000
+```
 
-Deep dive: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Schema: [db/schema.sql](db/schema.sql)
+Seed the database (first run only):
+
+```
+POST /api/admin/seed?secret=schrodinger-debug
+```
+
+---
 
 ## Repo layout
 
 ```
 .
-├── README.md                  ← you are here
+├── README.md
 ├── docs/
-│   ├── HOW_TO_PLAY.md         ← full game rules (buyers, sellers, spectators)
-│   ├── ARCHITECTURE.md        ← system design, diagrams, DSQL patterns, claim txn
-│   ├── FEE_MODEL.md           ← monetization math + incentive analysis
-│   ├── BUILD_PLAN.md          ← two-week execution plan
-│   └── SUBMISSION.md          ← hackathon checklist + 3-min video storyboard
-├── db/
-│   └── schema.sql             ← Aurora DSQL schema (UUID PKs, no sequences/triggers/FKs)
-└── app/                       ← Next.js app (to be scaffolded with v0)
+│   ├── HOW_TO_PLAY.md          full game rules
+│   ├── ARCHITECTURE.md         system design, DSQL patterns, claim transaction
+│   ├── FEE_MODEL.md            monetization math + incentive analysis
+│   ├── BUILD_PLAN.md           execution plan
+│   └── SUBMISSION.md           hackathon checklist + video storyboard
+├── app/
+│   ├── page.tsx                Lobby (server component + LobbyClient filter)
+│   ├── auctions/[id]/page.tsx  Auction room (server component)
+│   ├── sell/page.tsx           Listing form
+│   ├── demo/page.tsx           Judge walkthrough — 8-step accordion
+│   ├── admin/page.tsx          DB browser (SELECT-only)
+│   └── api/
+│       ├── auctions/           GET list, POST create, GET [id]/state
+│       ├── auth/               signup, signin, signout, me
+│       ├── votes/              POST — records a vote, derives tier
+│       ├── claims/             POST — guarded DSQL claim transaction
+│       ├── reactions/          POST — emoji burst logging
+│       └── admin/              seed, migrate, query (dev only)
+├── components/
+│   ├── AuctionRoom.tsx         Full auction room UI (votes, claim, reactions)
+│   ├── AuctionCard.tsx         Lobby grid card with live price ticker
+│   ├── FeaturedAuction.tsx     Hottest-right-now hero banner
+│   ├── LobbyClient.tsx         Client-side category filter + sort
+│   ├── Navbar.tsx              Auth state, wallet balance, global armed count
+│   ├── AuthModal.tsx           Sign in / Create account overlay
+│   ├── PriceTicker.tsx         Live falling price display
+│   └── LiveBadge.tsx           Animated LIVE indicator
+└── lib/
+    ├── price.ts                Deterministic price function (no DB reads)
+    ├── auth.ts                 Session cookie helpers (bcrypt + pg)
+    ├── db.ts                   Aurora DSQL connection via @aws-sdk/dsql-signer
+    ├── types.ts                Shared TypeScript types
+    └── utils.ts                cn() and small utilities
 ```
 
-## Status
+---
+
+## Stack
+
+| Layer | Tech | Why |
+|---|---|---|
+| Frontend | Next.js 14 (App Router), Tailwind CSS, scaffolded with v0 | Hackathon stack |
+| Deployment | Vercel | Edge network + seamless Next.js integration |
+| Database | **Amazon Aurora DSQL** | Active-active multi-region, strongly consistent SQL, serverless — the one-winner guarantee *is* the product |
+| Auth | Custom session cookies + bcrypt | No third-party dependency; session stored in Aurora DSQL |
+| Price ticker | Pure client-side function (`lib/price.ts`) | Same params + server clock → identical price on every device, no DB reads |
+| Realtime feel | 500ms client polling + server clock offset | A million viewers never touch the database for price reads |
+
+---
+
+## Key technical decisions
+
+### Why Aurora DSQL
+
+The claim transaction requires **strong consistency across regions** — two simultaneous claims must not both succeed. Aurora DSQL's active-active replication with OCC (optimistic concurrency control) gives us:
+
+1. A single `UPDATE ... WHERE winner_user_id IS NULL` that commits in exactly one region, aborting the other with a serialization conflict.
+2. The abort *is* the loser receipt — no polling, no separate lock table.
+3. Votes are insert-only rows (no hot row updates), avoiding OCC conflicts on the ledger.
+
+### Deterministic price function
+
+```
+price(t) = startPrice × (1 − elapsedActiveS / durationS) × burnMultiplier
+           clamped at reservePrice
+```
+
+`elapsedActiveS` excludes pause windows (act spotlight moments). `burnMultiplier` is 1.0 / 1.15 / 1.35 / 1.6 depending on armed-bidder demand milestones. The function is pure — same parameters on client and server produce the same price with no coordination.
+
+### No websockets
+
+Clients poll `/api/auctions/:id/state` every 500ms. The response is ~1 KB and served from Vercel's edge cache at `s-maxage=1`. A million viewers generate approximately one origin request per second per auction.
+
+---
+
+## Revenue model
+
+| Fee | Amount | Paid by | When |
+|---|---|---|---|
+| Listing fee | 20 coins flat | Seller | At listing |
+| Base commission | 5% of sale price | Seller | At settlement |
+| Spread bonus | 10% of (sale − reserve) | Seller | At settlement |
+
+The spread bonus aligns the platform with the seller: our engagement mechanics exist to push claims earlier on the price curve, which makes sellers richer and grows our fee.
+
+Full model: [docs/FEE_MODEL.md](docs/FEE_MODEL.md)
+
+---
+
+## Demo accounts
+
+| Email | Password | Notes |
+|---|---|---|
+| `demo@schrodinger.test` | `Demo1234!` | Pre-seeded, 50,000 coins |
+
+Or create a fresh account at `/` — every new account receives 50,000 demo coins.
+
+---
+
+## Build status
 
 - [x] Concept, mechanics, economics designed
 - [x] Architecture + data model designed for DSQL's optimistic concurrency
-- [ ] v0 scaffold of core screens (lobby, auction room, seller console)
-- [ ] DSQL provisioning + schema apply
-- [ ] Claim transaction + vote/reaction ingestion
-- [ ] Demo seed data + two-region demo script
-- [ ] 3-minute video + 3 bonus blog posts (#H0Hackathon)
+- [x] Aurora DSQL provisioned + schema applied
+- [x] Seed data: 6 demo auctions with stable UUIDs
+- [x] Lobby with live price tickers, category filter, featured banner
+- [x] Auction room: live price, BURN badge, act spotlight, vote, claim
+- [x] Auth: signup / signin / signout / session polling
+- [x] Sell page: full listing form → POST to Aurora DSQL
+- [x] Claims transaction: guarded UPDATE, double-entry ledger, win/loss screens
+- [x] Votes: insert-only, DSQL-safe pre-check deduplication, tier derivation
+- [x] Admin DB browser: live SELECT queries at `/admin`
+- [x] Demo script: 8-step judge walkthrough at `/demo`
+- [x] Deployed to Vercel
+
+---
 
 ## License & disclaimers
 
-Demo project for the H0 Hackathon. Uses demo coins only — no real payments, no real goods.
-Production deployment would require marketplace-facilitator legal review (auction regulations
-vary by jurisdiction), Stripe Connect for money movement, and KYC at payout. See
-[docs/ARCHITECTURE.md → Production hardening](docs/ARCHITECTURE.md#production-hardening-roadmap).
+Demo project for the H0 Hackathon. Uses demo coins only — no real payments, no real goods. Production deployment would require marketplace-facilitator legal review (auction regulations vary by jurisdiction), Stripe Connect for money movement, and KYC at payout.

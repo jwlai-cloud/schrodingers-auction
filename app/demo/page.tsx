@@ -121,21 +121,21 @@ const STEPS = [
     mins: 1.5,
     script: [
       "In a live auction, a vote button appears during each act spotlight (when the price pauses for 10 seconds). One click per act. Three acts = up to three votes.",
-      "For this demo, use the 'Demo: simulate vote (0/3)' button at the bottom of the arm panel to earn votes on demand — without waiting for an act boundary.",
-      "Click it once: Act 1 slot turns green. Tier 1 — 5s delay on claim.",
-      "Click again: Act 2 turns green. Tier 2 — 2s delay.",
-      "Click a third time: Act 3 turns green. 'CLAIM NOW' button turns amber. '3 votes — instant claim. You are fully armed.'",
+      "For this demo, use the 'Vote for Act 1 (0/3)' button at the bottom of the arm panel to earn votes on demand — without waiting for an act boundary. The label updates after each click.",
+      "Click it once: Act 1 slot turns green. Button now reads 'Vote for Act 2 (1/3)'. Tier 1 — 5s delay on claim.",
+      "Click again: Act 2 turns green. Button reads 'Vote for Act 3 (2/3)'. Tier 2 — 2s delay.",
+      "Click a third time: Act 3 turns green, button disappears. 'CLAIM NOW' turns amber. '3 votes — instant claim. You are fully armed.'",
       "Each vote also reveals the seller's act highlight below the product image. Point to the revealed 'Act 1', 'Act 2', 'Act 3' cards as they appear.",
       "Key message: the global armed counter in the Navbar ticks up — every vote is public information. That number is the pressure gauge.",
     ],
     demo: [
       {
-        action: "Click 'Demo: simulate vote (0/3)' once",
-        what: "Act 1 box goes green; tier label: '1 vote — 5s delay on claim'",
+        action: "Click 'Vote for Act 1 (0/3)' at the bottom of the arm panel",
+        what: "Act 1 box goes green; button updates to 'Vote for Act 2 (1/3)'; tier: '1 vote — 5s delay'",
       },
       {
         action: "Click twice more in succession",
-        what: "All three boxes green; 'CLAIM NOW' turns amber; '3 votes — instant claim'",
+        what: "All three boxes green; vote button disappears; 'CLAIM NOW' turns amber; '3 votes — instant claim'",
       },
       {
         action: "Scroll down on the left column",

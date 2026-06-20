@@ -21,10 +21,11 @@
  * Idempotency key makes double-clicks safe.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server"; // NextRequest not needed — using getSession() for auth
 import { randomUUID } from "crypto";
 import { withConnection } from "@/lib/db";
 import { computePrice, votesToTier, tierDelaySeconds } from "@/lib/price";
+import { getSession } from "@/lib/auth";
 import type { ClaimRequest, ClaimResponse, AuctionStateResponse } from "@/lib/types";
 import type { AuctionDecayParams, PauseWindow } from "@/lib/price";
 
@@ -59,12 +60,13 @@ interface ExistingClaimRow {
 }
 
 export async function POST(
-  req: NextRequest
+  req: Request
 ): Promise<NextResponse<ClaimResponse | { error: string }>> {
-  const userId = req.headers.get("x-user-id");
-  if (!userId) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   }
+  const userId = session.id;
 
   let body: unknown;
   try {
@@ -255,11 +257,10 @@ export async function POST(
           [sellerProceeds, a.seller_user_id]
         );
 
-        // Credit platform (fees)
+        // Credit platform (fees) — UPDATE only; platform wallet is pre-created by seed
         await client.query(
-          `INSERT INTO wallets (user_id, balance, updated_at) VALUES ($1, $2, NOW())
-           ON CONFLICT (user_id) DO UPDATE SET balance = wallets.balance + $2, updated_at = NOW()`,
-          [PLATFORM_USER_ID, totalFee]
+          `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE user_id = $2`,
+          [totalFee, PLATFORM_USER_ID]
         );
 
         // Ledger rows (buyer debit, seller credit, platform fee credit)
