@@ -7,15 +7,16 @@
  * null on empty/error so the pages can fall back to mock data for the demo.
  */
 import { query } from "@/lib/db";
-import type { AuctionSummary, AuctionStatus } from "@/lib/types";
+import type { AuctionSummary, AuctionStatus, FloorAction } from "@/lib/types";
 import type { AuctionDecayParams, PauseWindow } from "@/lib/price";
 
 export interface AuctionWithActsData extends AuctionSummary {
   acts: { actNo: 1 | 2 | 3; headline: string; detail: string }[];
 }
 
-interface AuctionDBRow {
+interface AuctionDBRow extends Record<string, unknown> {
   id: string;
+  seller_user_id: string;
   title: string;
   description: string | null;
   image_url: string | null;
@@ -29,6 +30,7 @@ interface AuctionDBRow {
   pause_windows: string | null;
   burn_level: number;
   burn_effective: string | Date | null;
+  floor_action: string | null;
   armed_3: number | null;
   armed_2: number | null;
   armed_1: number | null;
@@ -78,6 +80,8 @@ function rowToSummary(row: AuctionDBRow, nowMs: number): AuctionSummary {
     status: row.status as AuctionStatus,
     startPrice: Number(row.start_price),
     reservePrice: Number(row.reserve_price),
+    sellerUserId: row.seller_user_id,
+    floorAction: (row.floor_action === "withdraw" ? "withdraw" : "lottery") as FloorAction,
     decayParams,
     armed: { tier3: row.armed_3 ?? 0, tier2: row.armed_2 ?? 0, tier1: row.armed_1 ?? 0 },
     spectatorsEst: row.spectators_est ?? 0,
@@ -86,9 +90,9 @@ function rowToSummary(row: AuctionDBRow, nowMs: number): AuctionSummary {
 }
 
 const SELECT_COLS = `
-  a.id, a.title, a.description, a.image_url, a.category, a.status,
+  a.id, a.seller_user_id, a.title, a.description, a.image_url, a.category, a.status,
   a.start_price, a.reserve_price, a.duration_s, a.starts_at,
-  a.curve, a.pause_windows, a.burn_level, a.burn_effective,
+  a.curve, a.pause_windows, a.burn_level, a.burn_effective, a.floor_action,
   r.armed_3, r.armed_2, r.armed_1, r.spectators_est`;
 
 /** Live auctions for the lobby. Returns null on empty/error → caller falls back to mock. */

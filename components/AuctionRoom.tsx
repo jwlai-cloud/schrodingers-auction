@@ -169,6 +169,17 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
     setLossInfo(null);
   }
 
+  // ── Relist (seller only) ──────────────────────────────────────────────────
+  const isSeller = !!(user && auction.sellerUserId && user.id === auction.sellerUserId);
+  async function relist() {
+    try {
+      const res = await fetch(`/api/auctions/${auction.id}/relist`, { method: "POST" });
+      if (res.ok) window.location.reload();
+    } catch {
+      // ignore — button stays, user can retry
+    }
+  }
+
   // ── Reactions ─────────────────────────────────────────────────────────────
   const [bursts, setBursts] = useState<{ id: number; emoji: string; x: number }[]>([]);
   const burstId = useRef(0);
@@ -190,18 +201,22 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
     return () => clearInterval(id);
   }, []);
 
-  // ── Live status poll — detect when someone else claims the item ──────────
-  const [remoteWinner, setRemoteWinner] = useState<string | null>(null);
+  // ── Live status poll — detect when the auction ends (claim / lottery / unsold) ──
+  const [remoteWinner, setRemoteWinner] = useState<{ name: string; via: string } | null>(null);
+  const [endedUnsold, setEndedUnsold] = useState(false);
   useEffect(() => {
-    // Only poll mock auctions (DB auctions would use the state API).
-    // Poll every 4s; if status flips to "claimed", show the overlay.
+    // Poll every 4s; reflect a terminal status set by another claimer, the floor
+    // lottery, or a withdraw-unsold resolution.
     const pollId = setInterval(async () => {
       try {
         const r = await fetch(`/api/auctions/${auction.id}/state`);
         if (!r.ok) return;
         const data = await r.json();
-        if (data.status === "claimed" && data.winner && claimState === "idle") {
-          setRemoteWinner(data.winner.displayName ?? "someone");
+        if (claimState !== "idle") return;
+        if (data.status === "unsold" || data.status === "expired") {
+          setEndedUnsold(true);
+        } else if (data.status === "claimed" && data.winner) {
+          setRemoteWinner({ name: data.winner.displayName ?? "someone", via: data.winner.wonVia ?? "claim" });
         }
       } catch {
         // network error — ignore
@@ -285,28 +300,60 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
         />
       )}
 
-      {/* Remote winner overlay — shown when someone else claims while you're watching */}
-      {remoteWinner && claimState === "idle" && (
+      {/* Remote winner overlay — someone claimed, or the floor lottery awarded it */}
+      {remoteWinner && !endedUnsold && claimState === "idle" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-5 px-8 py-10 rounded-xl border border-border bg-card max-w-sm text-center shadow-xl">
             <div className="w-16 h-16 rounded-full bg-drop-red/10 border border-drop-red/30 flex items-center justify-center">
               <X className="w-8 h-8 text-drop-red" />
             </div>
             <div>
-              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-1">Item claimed</p>
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-1">
+                {remoteWinner.via === "lottery" ? "Floor lottery" : "Item claimed"}
+              </p>
               <h2 className="font-mono font-bold text-xl text-foreground">
-                <span className="text-amber">{remoteWinner}</span> got it.
+                <span className="text-amber">{remoteWinner.name}</span> got it.
               </h2>
               <p className="text-sm text-muted-foreground mt-2">
-                This auction has ended. The item was claimed while you were watching.
+                {remoteWinner.via === "lottery"
+                  ? "Nobody claimed before the floor — a fully-armed bidder won the draw at reserve price."
+                  : "This auction has ended. The item was claimed while you were watching."}
               </p>
             </div>
-            <Link
-              href="/"
-              className="px-6 py-2.5 rounded-md bg-amber text-amber-foreground font-mono font-semibold text-sm hover:opacity-90 transition-opacity"
-            >
+            <Link href="/" className="px-6 py-2.5 rounded-md bg-amber text-amber-foreground font-mono font-semibold text-sm hover:opacity-90 transition-opacity">
               Back to lobby
             </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Unsold overlay — price hit floor, seller chose withdraw */}
+      {endedUnsold && claimState === "idle" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-5 px-8 py-10 rounded-xl border border-border bg-card max-w-sm text-center shadow-xl">
+            <div className="w-16 h-16 rounded-full bg-muted border border-border flex items-center justify-center">
+              <X className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-1">Ended — not sold</p>
+              <h2 className="font-mono font-bold text-xl text-foreground">Reserve not met.</h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                The price reached the floor with no claim, so the seller kept the item. It may be relisted later.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Link href="/" className="px-5 py-2.5 rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors text-sm">
+                Back to lobby
+              </Link>
+              {isSeller && (
+                <button
+                  onClick={relist}
+                  className="px-5 py-2.5 rounded-md bg-amber text-amber-foreground font-mono font-semibold text-sm hover:opacity-90 transition-opacity"
+                >
+                  Relist now
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

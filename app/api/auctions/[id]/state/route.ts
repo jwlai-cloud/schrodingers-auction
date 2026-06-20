@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { resolveFloorIfNeeded } from "@/lib/floor";
 import type { AuctionStateResponse, AuctionStatus, WonVia } from "@/lib/types";
 import type { AuctionDecayParams, PauseWindow } from "@/lib/price";
 
@@ -57,6 +58,11 @@ export async function GET(
   }
 
   const now = Date.now();
+
+  // If the price has reached the floor with no claim, resolve it (lottery award
+  // or withdraw) before reading, so the room reflects the final state. No-op
+  // otherwise. Best-effort — never block the state read on it.
+  await resolveFloorIfNeeded(id).catch(() => {});
 
   // Single query: join auctions + rollup in one round-trip.
   const { rows } = await query<AuctionStateRow>(

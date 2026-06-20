@@ -26,9 +26,12 @@ export async function isAdmin(req?: NextRequest): Promise<boolean> {
   const session = await getSession().catch(() => null);
   if (session && ADMIN_EMAILS.has(session.email.toLowerCase())) return true;
 
-  // Secret-based check (local dev only — disabled if ADMIN_SECRET is not set)
+  // Secret-based check (machine callers / local dev — disabled if ADMIN_SECRET
+  // is not set in the env). Accept the secret via the x-admin-secret header
+  // (preferred — not logged in URLs) or the ?secret= query param.
   if (req && process.env.ADMIN_SECRET) {
-    const secret = req.nextUrl.searchParams.get("secret");
+    const secret =
+      req.headers.get("x-admin-secret") ?? req.nextUrl.searchParams.get("secret");
     if (secret && secret === process.env.ADMIN_SECRET) return true;
   }
 

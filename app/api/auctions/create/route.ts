@@ -15,6 +15,8 @@ import { actsToPauseWindows } from "@/lib/price";
 
 import { randomUUID } from "crypto";
 
+import type { FloorAction } from "@/lib/types";
+
 export interface CreateAuctionRequest {
   title: string;
   description: string;
@@ -22,6 +24,8 @@ export interface CreateAuctionRequest {
   startPrice: number;
   reservePrice: number;
   durationMinutes: number;
+  /** Floor behavior: 'lottery' (default) or 'withdraw' if unsold. */
+  floorAction?: FloorAction;
   acts: { actNo: 1 | 2 | 3; headline: string; detail?: string }[];
 }
 
@@ -40,6 +44,7 @@ export async function POST(req: Request) {
   }
 
   const { title, description, category, startPrice, reservePrice, durationMinutes, acts } = body;
+  const floorAction: FloorAction = body.floorAction === "withdraw" ? "withdraw" : "lottery";
 
   // Validation
   if (!title?.trim()) return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -65,8 +70,8 @@ export async function POST(req: Request) {
       `INSERT INTO auctions (
         id, seller_user_id, title, description, category,
         start_price, reserve_price, duration_s,
-        pause_windows, curve, burn_level, status, starts_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'linear',0,'listed', NOW())`,
+        pause_windows, curve, burn_level, status, floor_action, starts_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'linear',0,'live',$10, NOW())`,
       [
         auctionId,
         session.id,
@@ -77,6 +82,7 @@ export async function POST(req: Request) {
         reservePrice,
         durationS,
         JSON.stringify(pauseWindows),
+        floorAction,
       ]
     );
 

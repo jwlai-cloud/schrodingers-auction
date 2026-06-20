@@ -15,6 +15,7 @@ interface FormState {
   startPrice: string;
   reservePrice: string;
   durationMinutes: string;
+  floorAction: string; // "lottery" | "withdraw"
   act1Highlight: string;
   act2Highlight: string;
   act3Highlight: string;
@@ -27,6 +28,7 @@ const INITIAL: FormState = {
   startPrice: "",
   reservePrice: "",
   durationMinutes: "15",
+  floorAction: "lottery",
   act1Highlight: "",
   act2Highlight: "",
   act3Highlight: "",
@@ -83,6 +85,7 @@ export default function SellPage() {
           startPrice: startPriceNum,
           reservePrice: reservePriceNum,
           durationMinutes: Number(form.durationMinutes),
+          floorAction: form.floorAction === "withdraw" ? "withdraw" : "lottery",
           acts: [
             { actNo: 1, headline: form.act1Highlight.trim() },
             { actNo: 2, headline: form.act2Highlight.trim() },
@@ -272,6 +275,36 @@ export default function SellPage() {
               <div className="flex justify-between text-[10px] font-mono text-muted-foreground">
                 <span>5 min</span>
                 <span>60 min</span>
+              </div>
+            </div>
+
+            {/* Floor behaviour */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                If the price reaches your floor with no claim
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { value: "lottery", title: "Floor lottery", sub: "A random fully-armed bidder wins at your floor price. Always sells." },
+                  { value: "withdraw", title: "Withdraw unsold", sub: "Item is taken down — not sold. You can relist it later." },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => set("floorAction", opt.value)}
+                    className={
+                      "text-left rounded-md border p-3 transition-all " +
+                      (form.floorAction === opt.value
+                        ? "border-amber/50 bg-amber/5"
+                        : "border-border hover:border-amber/30")
+                    }
+                  >
+                    <p className={"text-sm font-semibold " + (form.floorAction === opt.value ? "text-amber" : "text-foreground")}>
+                      {opt.title}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{opt.sub}</p>
+                  </button>
+                ))}
               </div>
             </div>
 
