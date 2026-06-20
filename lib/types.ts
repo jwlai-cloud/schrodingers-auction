@@ -178,6 +178,7 @@ export interface ClaimResponse {
 export interface AuctionSummary {
   id: string;
   title: string;
+  description?: string;
   imageUrl: string | null;
   category: string;
   status: AuctionStatus;

@@ -99,10 +99,17 @@ export function AuctionCard({ auction, clockOffsetMs, priority = false }: Auctio
 
       {/* ── Card body ─────────────────────────────────────────── */}
       <div className="flex flex-col gap-4 p-4">
-        {/* Title */}
-        <h2 className="font-sans font-semibold text-foreground text-balance leading-snug line-clamp-2 text-sm md:text-base">
-          {auction.title}
-        </h2>
+        {/* Title + description */}
+        <div>
+          <h2 className="font-sans font-semibold text-foreground text-balance leading-snug line-clamp-2 text-sm md:text-base">
+            {auction.title}
+          </h2>
+          {auction.description && (
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+              {auction.description}
+            </p>
+          )}
+        </div>
 
         {/* Live price ticker */}
         <PriceTicker

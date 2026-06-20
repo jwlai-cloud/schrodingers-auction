@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { ArrowLeft, Check, Info, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowLeft, Check, Info, Loader2, LogIn } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
+import { AuthModal } from "@/components/AuthModal";
 
 const CATEGORIES = ["Electronics", "Gaming", "Home", "Photography", "Collectibles", "Fashion", "Sports", "Other"];
 
@@ -38,6 +39,15 @@ export default function SellPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<{ displayName: string } | null | undefined>(undefined);
+  const [showAuth, setShowAuth] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setUser(d.user ?? null))
+      .catch(() => setUser(null));
+  }, []);
 
   function set(key: keyof FormState, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -52,6 +62,7 @@ export default function SellPage() {
     e.preventDefault();
     setError(null);
 
+    if (!user) { setShowAuth(true); return; }
     if (!form.title.trim()) return setError("Item title is required.");
     if (!form.startPrice || startPriceNum <= 0) return setError("Start price must be greater than 0.");
     if (!form.reservePrice || reservePriceNum < 0) return setError("Reserve price cannot be negative.");
@@ -61,10 +72,35 @@ export default function SellPage() {
     }
 
     setLoading(true);
-    // Simulate API submission
-    await new Promise((r) => setTimeout(r, 1200));
-    setLoading(false);
-    setSubmitted(true);
+    try {
+      const res = await fetch("/api/auctions/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: form.title.trim(),
+          description: form.description.trim(),
+          category: form.category,
+          startPrice: startPriceNum,
+          reservePrice: reservePriceNum,
+          durationMinutes: Number(form.durationMinutes),
+          acts: [
+            { actNo: 1, headline: form.act1Highlight.trim() },
+            { actNo: 2, headline: form.act2Highlight.trim() },
+            { actNo: 3, headline: form.act3Highlight.trim() },
+          ],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong. Please try again.");
+      } else {
+        setSubmitted(true);
+      }
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (submitted) {
@@ -117,6 +153,15 @@ export default function SellPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {showAuth && (
+        <AuthModal
+          onClose={() => setShowAuth(false)}
+          onSuccess={() => {
+            setShowAuth(false);
+            fetch("/api/auth/me").then((r) => r.json()).then((d) => setUser(d.user ?? null));
+          }}
+        />
+      )}
       <Navbar />
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <Link href="/" className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-sm mb-6">
@@ -301,17 +346,36 @@ export default function SellPage() {
             </p>
           )}
 
+          {/* Auth banner — shown when user is not signed in */}
+          {user === null && (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-amber/30 bg-amber/5 px-4 py-3">
+              <p className="text-xs text-muted-foreground font-mono">
+                Sign in to submit your listing.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAuth(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-amber text-amber-foreground text-xs font-semibold hover:opacity-90 transition-opacity"
+              >
+                <LogIn className="w-3.5 h-3.5" aria-hidden="true" />
+                Sign in
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center justify-between gap-4">
             <p className="text-xs text-muted-foreground font-mono">
-              Listing fee: <span className="text-foreground">{LISTING_FEE} coins</span> (charged on submit)
+              {user
+                ? <>Listing fee: <span className="text-foreground">{LISTING_FEE} coins</span> (charged on submit)</>
+                : <>Sign in required to list items</>}
             </p>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || user === undefined}
               className="flex items-center gap-2 px-6 py-2.5 rounded-md bg-amber text-amber-foreground font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Submit listing
+              {loading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+              {user === null ? "Sign in to list" : "Submit listing"}
             </button>
           </div>
         </form>

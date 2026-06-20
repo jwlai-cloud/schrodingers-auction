@@ -13,11 +13,15 @@ export async function GET(req: NextRequest) {
 
   const sql = req.nextUrl.searchParams.get("sql") ?? "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name";
 
+  if (!sql.trim().toUpperCase().startsWith("SELECT")) {
+    return NextResponse.json({ error: "Only SELECT statements are allowed" }, { status: 400 });
+  }
+
   try {
-    const result = await query(sql);
+    const result = await query<Record<string, unknown>>(sql);
     return NextResponse.json({
-      rowCount: result.rowCount,
-      fields: result.fields.map((f) => f.name),
+      ok: true,
+      rowCount: result.rows.length,
       rows: result.rows,
     });
   } catch (err) {
