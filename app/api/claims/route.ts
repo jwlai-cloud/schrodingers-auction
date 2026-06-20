@@ -75,14 +75,15 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { auctionId, idempotencyKey } = body as ClaimRequest;
+  const { auctionId, idempotencyKey: rawKey } = body as ClaimRequest;
 
-  if (!auctionId || !idempotencyKey) {
-    return NextResponse.json(
-      { error: "auctionId and idempotencyKey are required" },
-      { status: 400 }
-    );
+  if (!auctionId) {
+    return NextResponse.json({ error: "auctionId is required" }, { status: 400 });
   }
+
+  // claims.id is a UUID primary key — validate or generate a fresh one.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const idempotencyKey = rawKey && UUID_RE.test(rawKey) ? rawKey : randomUUID();
 
   const now = Date.now();
 
