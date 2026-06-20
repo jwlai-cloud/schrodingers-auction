@@ -100,6 +100,7 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
   const [claimState, setClaimState] = useState<ClaimState>("idle");
   const [claimCountdown, setClaimCountdown] = useState(0);
   const [finalPrice, setFinalPrice] = useState(0);
+  const [lossInfo, setLossInfo] = useState<{ winnerName: string; beatenByMs: number } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function handleClaim() {
@@ -145,9 +146,15 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
         setFinalPrice(data.serverPrice ?? finalPrice);
         setClaimState("won");
       } else {
+        // Store real winner + timing from the API so the loss screen is honest
+        setLossInfo({
+          winnerName: data.winner?.displayName ?? "another bidder",
+          beatenByMs: data.loserReceipt?.beatenByMs ?? 0,
+        });
         setClaimState("lost");
       }
     } catch {
+      setLossInfo(null);
       setClaimState("lost");
     }
   }
@@ -156,6 +163,7 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setClaimState("idle");
     setClaimCountdown(0);
+    setLossInfo(null);
   }
 
   // ── Reactions ─────────────────────────────────────────────────────────────
@@ -224,18 +232,13 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
   }
 
   if (claimState === "lost") {
-    // Generate a deterministic-looking ghost name + delta so every demo
-    // shows a believable race. The names rotate through a pool seeded by
-    // the auction id so the same item always "loses" to the same ghost.
-    const GHOST_NAMES = [
-      "Alex_K", "mei.ling", "rodrigo_br", "anon_sg", "ghost_42",
-      "fast_fingers", "tokio_drift", "sunita.r", "lukas.eu", "neon_ny",
-    ];
-    const ghostIdx = auction.id.charCodeAt(auction.id.length - 1) % GHOST_NAMES.length;
-    const ghostName = GHOST_NAMES[ghostIdx];
-    // delta: 0.1–0.9s, derived from auction id for consistency
-    const deltaTenths = (auction.id.charCodeAt(0) % 9) + 1;
-    const deltaStr = `0.${deltaTenths}`;
+    const winnerName = lossInfo?.winnerName ?? "another bidder";
+    const beatenByMs = lossInfo?.beatenByMs ?? null;
+    const deltaStr = beatenByMs !== null
+      ? beatenByMs < 1000
+        ? `${beatenByMs}ms`
+        : `${(beatenByMs / 1000).toFixed(2)}s`
+      : null;
 
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 px-4 text-center">
@@ -243,15 +246,19 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
           <X className="w-10 h-10 text-drop-red" />
         </div>
         <div>
-          <h1 className="font-mono font-bold text-3xl text-drop-red">{deltaStr} seconds.</h1>
+          {deltaStr && (
+            <h1 className="font-mono font-bold text-3xl text-drop-red">{deltaStr}.</h1>
+          )}
           <p className="text-muted-foreground mt-2 text-sm max-w-xs mx-auto">
-            <span className="font-mono text-foreground">{ghostName}</span> was faster. You were one of{" "}
+            <span className="font-mono text-foreground">{winnerName}</span> was faster. You were one of{" "}
             <span className="font-mono text-foreground">{liveArmed}</span> armed — they got it first.
           </p>
-          <p className="text-muted-foreground mt-3 text-xs max-w-xs mx-auto">
-            This is a real race. Everyone watching computed the same price, and{" "}
-            <span className="font-mono">{ghostName}</span>&apos;s claim arrived {deltaStr}s before yours.
-          </p>
+          {deltaStr && (
+            <p className="text-muted-foreground mt-3 text-xs max-w-xs mx-auto">
+              Their claim hit the database {deltaStr} before yours.
+              One atomic write. One winner.
+            </p>
+          )}
         </div>
         <button
           onClick={resetClaim}

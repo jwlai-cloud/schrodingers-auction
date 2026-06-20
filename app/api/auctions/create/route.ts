@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { query } from "@/lib/db";
+import { actsToPauseWindows } from "@/lib/price";
 
 import { randomUUID } from "crypto";
 
@@ -50,12 +51,12 @@ export async function POST(req: Request) {
 
   const auctionId = randomUUID();
   const durationS = durationMinutes * 60;
-  // Pause windows: one 30-second pause per act boundary
-  const pauseWindows = [
-    { startS: Math.floor(durationS * 0.25), durationS: 30 },
-    { startS: Math.floor(durationS * 0.5),  durationS: 30 },
-    { startS: Math.floor(durationS * 0.75), durationS: 30 },
-  ];
+  // Pause windows using the canonical helper so shape matches what computePrice expects
+  const pauseWindows = actsToPauseWindows([
+    Math.floor(durationS * 0.25),
+    Math.floor(durationS * 0.5),
+    Math.floor(durationS * 0.75),
+  ]);
   // Attempt DB write — gracefully degrade to mock if DB is unavailable
   try {
     // starts_at is required (NOT NULL, no default). New listings are queued for

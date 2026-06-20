@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withConnection } from "@/lib/db";
 import { actsToPauseWindows } from "@/lib/price";
-import { getSession } from "@/lib/auth";
-
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "junwei.lai@gmail.com")
-  .split(",").map((e) => e.trim().toLowerCase());
+import { isAdmin } from "@/lib/adminAuth";
 
 export async function POST(req: NextRequest) {
-  const session = await getSession().catch(() => null);
-  const isAdmin = session && ADMIN_EMAILS.includes(session.email.toLowerCase());
-  const secret = req.nextUrl.searchParams.get("secret");
-  const isSecret = secret && secret === (process.env.ADMIN_SECRET ?? "schrodinger-debug");
-  if (!isAdmin && !isSecret) {
+  if (!(await isAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -132,7 +125,10 @@ export async function POST(req: NextRequest) {
           status = 'live',
           starts_at = EXCLUDED.starts_at,
           burn_level = EXCLUDED.burn_level,
-          image_url = EXCLUDED.image_url`,
+          image_url = EXCLUDED.image_url,
+          winner_user_id = NULL,
+          winning_price = NULL,
+          claimed_at = NULL`,
         [
           a.id,
           a.title,

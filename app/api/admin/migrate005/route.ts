@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { isAdmin } from "@/lib/adminAuth";
 
 export async function GET(req: NextRequest) {
-  const secret = req.nextUrl.searchParams.get("secret");
-  if (secret !== (process.env.ADMIN_SECRET ?? "schrodinger-debug")) {
+  if (!(await isAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -25,7 +25,6 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // DSQL does not support ADD COLUMN with NOT NULL DEFAULT — add nullable first
     await run(`ALTER TABLE auctions ADD COLUMN IF NOT EXISTS category VARCHAR(40)`);
     await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(200)`);
     await run(`CREATE TABLE IF NOT EXISTS sessions (

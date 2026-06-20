@@ -154,6 +154,30 @@ export default function AdminPage() {
             >
               Re-seed demo data
             </button>
+            <button
+              onClick={async () => {
+                const auctionId = prompt("Auction ID to race (leave blank for Lego Bugatti):")
+                  || "11111111-0000-0000-0000-000000000005";
+                setLoading(true);
+                const t = Date.now();
+                const r = await fetch("/api/admin/bots", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ auctionId, count: 5, maxDelayMs: 1200 }),
+                });
+                const d = await r.json();
+                setError(r.ok ? null : (d.error ?? "Bot race failed"));
+                setResult({
+                  rows: (d.results ?? []).map((s: Record<string, unknown>) => s),
+                  rowCount: (d.results ?? []).length,
+                  durationMs: Date.now() - t,
+                });
+                setLoading(false);
+              }}
+              className="text-left px-3 py-2 rounded-md text-xs text-amber/70 hover:text-amber hover:bg-muted transition-colors font-mono"
+            >
+              Run bot race (5 bots)
+            </button>
           </div>
         </aside>
 
