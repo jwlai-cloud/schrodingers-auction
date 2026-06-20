@@ -1,6 +1,11 @@
 /**
  * app/auctions/[id]/page.tsx — Auction room server page.
+ *
+ * Must be dynamic so Date.now() inside buildMockAuction is evaluated
+ * fresh on every request rather than at build/cache time — otherwise
+ * startsAtMs is stale and the price appears frozen.
  */
+export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 import { actsToPauseWindows } from "@/lib/price";

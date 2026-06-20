@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withConnection } from "@/lib/db";
 import { actsToPauseWindows } from "@/lib/price";
+import { getSession } from "@/lib/auth";
+
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "junwei.lai@gmail.com")
+  .split(",").map((e) => e.trim().toLowerCase());
 
 export async function POST(req: NextRequest) {
+  const session = await getSession().catch(() => null);
+  const isAdmin = session && ADMIN_EMAILS.includes(session.email.toLowerCase());
   const secret = req.nextUrl.searchParams.get("secret");
-  if (secret !== (process.env.ADMIN_SECRET ?? "schrodinger-debug")) {
+  const isSecret = secret && secret === (process.env.ADMIN_SECRET ?? "schrodinger-debug");
+  if (!isAdmin && !isSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -149,12 +156,18 @@ export async function POST(req: NextRequest) {
       ];
       for (let i = 1; i <= 3; i++) {
         const revealAt = Math.floor(a.duration_s * (i / 4));
-        await client.query(
-          `INSERT INTO acts (id, auction_id, act_no, headline, detail, reveal_offset_s)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
-           ON CONFLICT (auction_id, act_no) DO NOTHING`,
-          [a.id, i, highlights[i - 1], "", revealAt]
+        // DSQL does not support ON CONFLICT on non-PK unique indexes — pre-check
+        const { rows: existing } = await client.query(
+          `SELECT id FROM acts WHERE auction_id = $1 AND act_no = $2 LIMIT 1`,
+          [a.id, i]
         );
+        if (existing.length === 0) {
+          await client.query(
+            `INSERT INTO acts (id, auction_id, act_no, headline, detail, reveal_offset_s)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
+            [a.id, i, highlights[i - 1], "", revealAt]
+          );
+        }
       }
 
       results.push(`seeded auction ${a.id}`);

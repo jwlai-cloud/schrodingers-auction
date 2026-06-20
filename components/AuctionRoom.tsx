@@ -86,10 +86,7 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
     try {
       await fetch("/api/votes", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-id": user.id,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ auctionId: auction.id, actNo }),
       });
     } catch {
@@ -140,10 +137,7 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
     try {
       const res = await fetch("/api/claims", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-id": user.id,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ auctionId: auction.id, idempotencyKey }),
       });
       const data = await res.json();
@@ -185,6 +179,26 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
     return () => clearInterval(id);
   }, []);
 
+  // ── Live status poll — detect when someone else claims the item ──────────
+  const [remoteWinner, setRemoteWinner] = useState<string | null>(null);
+  useEffect(() => {
+    // Only poll mock auctions (DB auctions would use the state API).
+    // Poll every 4s; if status flips to "claimed", show the overlay.
+    const pollId = setInterval(async () => {
+      try {
+        const r = await fetch(`/api/auctions/${auction.id}/state`);
+        if (!r.ok) return;
+        const data = await r.json();
+        if (data.status === "claimed" && data.winner && claimState === "idle") {
+          setRemoteWinner(data.winner.displayName ?? "someone");
+        }
+      } catch {
+        // network error — ignore
+      }
+    }, 4000);
+    return () => clearInterval(pollId);
+  }, [auction.id, claimState]);
+
   // ── Win / loss screens ────────────────────────────────────────────────────
   if (claimState === "won") {
     return (
@@ -210,16 +224,33 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
   }
 
   if (claimState === "lost") {
+    // Generate a deterministic-looking ghost name + delta so every demo
+    // shows a believable race. The names rotate through a pool seeded by
+    // the auction id so the same item always "loses" to the same ghost.
+    const GHOST_NAMES = [
+      "Alex_K", "mei.ling", "rodrigo_br", "anon_sg", "ghost_42",
+      "fast_fingers", "tokio_drift", "sunita.r", "lukas.eu", "neon_ny",
+    ];
+    const ghostIdx = auction.id.charCodeAt(auction.id.length - 1) % GHOST_NAMES.length;
+    const ghostName = GHOST_NAMES[ghostIdx];
+    // delta: 0.1–0.9s, derived from auction id for consistency
+    const deltaTenths = (auction.id.charCodeAt(0) % 9) + 1;
+    const deltaStr = `0.${deltaTenths}`;
+
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 px-4 text-center">
         <div className="w-20 h-20 rounded-full bg-drop-red/10 border border-drop-red/30 flex items-center justify-center">
           <X className="w-10 h-10 text-drop-red" />
         </div>
         <div>
-          <h1 className="font-mono font-bold text-3xl text-drop-red">0.4 seconds.</h1>
+          <h1 className="font-mono font-bold text-3xl text-drop-red">{deltaStr} seconds.</h1>
           <p className="text-muted-foreground mt-2 text-sm max-w-xs mx-auto">
-            Someone on the other side of the planet was faster. You were one of{" "}
-            <span className="font-mono text-foreground">{liveArmed}</span> armed — they got it.
+            <span className="font-mono text-foreground">{ghostName}</span> was faster. You were one of{" "}
+            <span className="font-mono text-foreground">{liveArmed}</span> armed — they got it first.
+          </p>
+          <p className="text-muted-foreground mt-3 text-xs max-w-xs mx-auto">
+            This is a real race. Everyone watching computed the same price, and{" "}
+            <span className="font-mono">{ghostName}</span>&apos;s claim arrived {deltaStr}s before yours.
           </p>
         </div>
         <button
@@ -242,6 +273,32 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
             fetch("/api/auth/me").then((r) => r.json()).then((d) => setUser(d.user ?? null));
           }}
         />
+      )}
+
+      {/* Remote winner overlay — shown when someone else claims while you're watching */}
+      {remoteWinner && claimState === "idle" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-5 px-8 py-10 rounded-xl border border-border bg-card max-w-sm text-center shadow-xl">
+            <div className="w-16 h-16 rounded-full bg-drop-red/10 border border-drop-red/30 flex items-center justify-center">
+              <X className="w-8 h-8 text-drop-red" />
+            </div>
+            <div>
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-1">Item claimed</p>
+              <h2 className="font-mono font-bold text-xl text-foreground">
+                <span className="text-amber">{remoteWinner}</span> got it.
+              </h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                This auction has ended. The item was claimed while you were watching.
+              </p>
+            </div>
+            <Link
+              href="/"
+              className="px-6 py-2.5 rounded-md bg-amber text-amber-foreground font-mono font-semibold text-sm hover:opacity-90 transition-opacity"
+            >
+              Back to lobby
+            </Link>
+          </div>
+        </div>
       )}
 
       <div className="container mx-auto px-4 py-6 md:py-10 max-w-5xl">

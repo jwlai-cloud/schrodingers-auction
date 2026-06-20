@@ -3,11 +3,12 @@
 /**
  * /admin — lightweight database browser for demo/debug.
  * Calls /api/admin/query to run read-only SQL against Aurora DSQL.
+ * Only admin emails (ADMIN_EMAILS env var) can access this.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Play, Database, Loader2 } from "lucide-react";
+import { ArrowLeft, Play, Database, Loader2, Lock } from "lucide-react";
 
 const QUICK_QUERIES = [
   { label: "All auctions", sql: "SELECT id, title, category, status, start_price, reserve_price FROM auctions ORDER BY created_at DESC LIMIT 20" },
@@ -30,6 +31,51 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Auth gate — check if the current user is an admin
+  const [authState, setAuthState] = useState<"checking" | "allowed" | "denied">("checking");
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.user) { setAuthState("denied"); return; }
+        // The API will 401 if the user is not an admin; we pre-check here
+        // by hitting a lightweight query — if it 401s, deny.
+        return fetch("/api/admin/query?sql=SELECT+1+AS+ping")
+          .then((r) => setAuthState(r.ok ? "allowed" : "denied"));
+      })
+      .catch(() => setAuthState("denied"));
+  }, []);
+
+  if (authState === "checking") {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (authState === "denied") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-5 px-4 text-center">
+        <div className="w-16 h-16 rounded-full bg-muted border border-border flex items-center justify-center">
+          <Lock className="w-7 h-7 text-muted-foreground" />
+        </div>
+        <div>
+          <h1 className="font-mono font-bold text-xl text-foreground">Admin access only</h1>
+          <p className="text-muted-foreground text-sm mt-2 max-w-xs">
+            Sign in with an admin account to access the database browser.
+          </p>
+        </div>
+        <Link
+          href="/"
+          className="px-5 py-2.5 rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors text-sm font-mono"
+        >
+          Back to lobby
+        </Link>
+      </div>
+    );
+  }
+
   async function runQuery() {
     setError(null);
     setResult(null);
@@ -37,7 +83,7 @@ export default function AdminPage() {
     const start = Date.now();
     try {
       const res = await fetch(
-        `/api/admin/query?secret=schrodinger-debug&sql=${encodeURIComponent(sql)}`
+        `/api/admin/query?sql=${encodeURIComponent(sql)}`
       );
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -89,7 +135,7 @@ export default function AdminPage() {
           <div className="mt-4 border-t border-border pt-3 flex flex-col gap-1">
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground px-2 py-1">Admin actions</p>
             <a
-              href="/api/admin/migrate006?secret=schrodinger-debug"
+              href="/api/admin/migrate006"
               target="_blank"
               className="text-left px-3 py-2 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-mono"
             >
@@ -98,7 +144,7 @@ export default function AdminPage() {
             <button
               onClick={async () => {
                 setLoading(true);
-                const r = await fetch("/api/admin/seed?secret=schrodinger-debug", { method: "POST" });
+                const r = await fetch("/api/admin/seed", { method: "POST" });
                 const d = await r.json();
                 setError(null);
                 setResult({ rows: d.results?.map((s: string) => ({ result: s })) ?? [], rowCount: d.results?.length ?? 0, durationMs: 0 });
