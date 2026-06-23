@@ -37,10 +37,12 @@ export async function POST(req: NextRequest) {
     await client.query("COMMIT");
 
     for (const item of DEMO_ITEMS) {
-      // Stagger: start each item somewhere between 5% and 70% down its curve.
-      const frac = 0.05 + Math.random() * 0.65;
+      // Stagger near the top of the curve (0–40% down) with gentle burn, so items
+      // stay live and visibly falling rather than nuking to the floor in minutes.
+      // The 20-min cron + decay still carries some to the floor to show lottery/withdraw.
+      const frac = Math.random() * 0.4;
       const startsAt = new Date(Date.now() - Math.floor(frac * item.durationS * 1000));
-      const burnLevel = Math.floor(Math.random() * 4); // 0–3
+      const burnLevel = Math.floor(Math.random() * 3); // 0–2
       const burnEffective = burnLevel > 0 ? new Date(Date.now() - 90_000) : null;
       const pauseWindows = actsToPauseWindows([
         Math.floor(item.durationS * 0.25),

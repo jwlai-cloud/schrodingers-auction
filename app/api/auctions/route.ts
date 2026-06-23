@@ -124,6 +124,9 @@ function makeMockList(): AuctionListResponse {
   return { auctions, serverTimeMs: now };
 }
 
+// Never CDN-cache the live list — stale prices look like the auction "jumping".
+export const dynamic = "force-dynamic";
+
 export async function GET(): Promise<NextResponse<AuctionListResponse>> {
   const now = Date.now();
 
@@ -155,7 +158,7 @@ export async function GET(): Promise<NextResponse<AuctionListResponse>> {
     if (result.rows.length === 0) {
       // No live rows yet — return mock so the lobby always has content
       return NextResponse.json(makeMockList(), {
-        headers: { "Cache-Control": "public, s-maxage=5, stale-while-revalidate=5" },
+        headers: { "Cache-Control": "no-store" },
       });
     }
 
@@ -202,7 +205,7 @@ export async function GET(): Promise<NextResponse<AuctionListResponse>> {
 
     return NextResponse.json(
       { auctions, serverTimeMs: now },
-      { headers: { "Cache-Control": "public, s-maxage=5, stale-while-revalidate=5" } }
+      { headers: { "Cache-Control": "no-store" } }
     );
   } catch {
     // DB unavailable — graceful fallback to mock data
