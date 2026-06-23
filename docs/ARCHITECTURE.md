@@ -180,10 +180,10 @@ conflicts. The rollup writer is a single cron, so it never conflicts with itself
 |---|---|---|
 | Vote | `INSERT INTO votes` with `UNIQUE (auction_id, user_id, act_no)` for idempotency | Insert-only → no hot row |
 | Reaction | `INSERT INTO reactions` (no uniqueness; bursty by design) | Insert-only → no hot row |
-| Armed counter | Cron aggregates `votes` → one `UPDATE auction_rollups` row | Single writer → no races |
+| Armed counter | Computed on read from `votes` (count per user → tier); surfaced in lobby / room / `state` | Read-time aggregate → no writer |
 | Claim | Guarded `UPDATE ... WHERE winner_user_id IS NULL` + ledger | Intentionally contended — exactly one survives |
-| Demand burn | Burn level derived from rollup counts, stored in `auction_rollups`; price function reads it as a parameter with an effective-from timestamp | Single writer |
-| Floor lottery | Cron detects price ≤ reserve, draws from `lottery_entries` (`ORDER BY random()` over a snapshot), settles via the same claim transaction | Single writer |
+| Demand brake | `burn_level` ratcheted up at armed milestones (5/15/30) by the votes/bots routes, with an effective-from timestamp; the price function reads it as a sub-1 multiplier that *slows* decay | Monotonic, single writer per step |
+| Floor resolution | Lazy on `state` read (no cron): once price ≤ reserve and unclaimed, `floor_action` decides — `lottery` draws a fully-armed entrant and settles via the claim path, or `withdraw` sets `status='unsold'` (relistable). Guarded `UPDATE` → one outcome | OCC-guarded |
 
 **Clock discipline:** clients fetch a server-time offset once (and on refocus) and
 render the price from `server_now = local_now + offset`. Authoritative pricing at

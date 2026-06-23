@@ -30,8 +30,8 @@ Item listed: start `1,000`, reserve `400`.
 | Expired (no lottery entrants) | — | — | — | **20** listing only | −20 |
 
 Note the gradient: the platform earns **4×** more on an early claim than at the floor.
-Every engagement mechanic (visible armed demand, spotlight acts, demand burn) exists to
-push claims left on the price curve — which simultaneously maximizes seller revenue.
+Every engagement mechanic (visible armed demand, spotlight acts, the demand brake) exists to
+keep claims high on the price curve — which simultaneously maximizes seller revenue.
 **Engagement, seller income, and platform income are the same lever.** That is the
 monetization pitch in one sentence.
 

@@ -36,9 +36,9 @@ Classic Dutch auctions are *informationally dead* — nothing happens until the 
 ## How to play
 
 1. **Watch** — an item's price falls every second, worldwide. Everyone sees the same price at all times.
-2. **Arm** — the seller reveals 3 highlights during the countdown ("acts"). Vote on each one you witness. 3 votes = fully armed = instant-claim rights. Fewer votes = delayed claim.
+2. **Arm** — the seller reveals 3 highlights during the countdown ("acts"). Vote on each one once it's revealed (one vote at a time — a short cooldown keeps it deliberate). 3 votes = fully armed = instant-claim rights. Fewer votes = delayed claim. As more bidders arm, a **demand brake** slows the price drop, so hot items hold a high price.
 3. **Claim** — press the button before anyone else on the planet. One atomic transaction decides the winner.
-4. **Floor lottery** — if no one claims before the reserve price, the item goes to a random fully-armed bidder who opted in. The seller always sells.
+4. **At the floor** — the lister chooses what happens if no one claims before the reserve price: a **floor lottery** (a random fully-armed bidder wins at reserve — the seller always sells) or **withdraw** (the item is taken down unsold and can be relisted).
 
 Full rules: [docs/HOW_TO_PLAY.md](docs/HOW_TO_PLAY.md)
 
@@ -141,11 +141,11 @@ The claim transaction requires **strong consistency across regions** — two sim
 ### Deterministic price function
 
 ```
-price(t) = startPrice × (1 − elapsedActiveS / durationS) × burnMultiplier
+price(t) = startPrice × (1 − effectiveActiveS / durationS)
            clamped at reservePrice
 ```
 
-`elapsedActiveS` excludes pause windows (act spotlight moments). `burnMultiplier` is 1.0 / 1.15 / 1.35 / 1.6 depending on armed-bidder demand milestones. The function is pure — same parameters on client and server produce the same price with no coordination.
+`effectiveActiveS` excludes pause windows (act spotlight moments) and applies the **demand brake**: as armed bidders cross milestones (5 / 15 / 30), the decay rate is *slowed* by ×0.75 / ×0.55 / ×0.4 from the moment the brake takes effect — so demand props the price up instead of fire-selling. The function is pure — same parameters on client and server produce the same price with no coordination.
 
 ### No websockets
 
@@ -184,14 +184,19 @@ Or create a fresh account at `/` — every new account receives 50,000 demo coin
 - [x] Aurora DSQL provisioned + schema applied
 - [x] Seed data: 6 demo auctions with stable UUIDs
 - [x] Lobby with live price tickers, category filter, featured banner
-- [x] Auction room: live price, BURN badge, act spotlight, vote, claim
+- [x] Auction room: live price, demand-HOLD badge, act spotlight, vote, claim
 - [x] Auth: signup / signin / signout / session polling
 - [x] Sell page: full listing form → POST to Aurora DSQL
 - [x] Claims transaction: guarded UPDATE, double-entry ledger, win/loss screens
 - [x] Votes: insert-only, DSQL-safe pre-check deduplication, tier derivation
-- [x] Admin DB browser: live SELECT queries at `/admin`
+- [x] Admin DB browser: live SELECT queries at `/admin` (gated; no default secret)
 - [x] Demo script: 8-step judge walkthrough at `/demo`
 - [x] Deployed to Vercel
+- [x] Real armed-tier counts (1/2/3 votes) computed from the votes table
+- [x] Demand brake: more armed → slower decay; urgency copy escalates with demand
+- [x] Deliberate voting: votes gated to revealed acts + short cooldown
+- [x] Floor behavior per listing: floor lottery **or** withdraw-unsold + relist
+- [x] Live-demo tooling: bot races (claim or arm-only) + 20-min refresh cron
 
 ---
 
