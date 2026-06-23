@@ -16,6 +16,7 @@ interface FormState {
   reservePrice: string;
   durationMinutes: string;
   floorAction: string; // "lottery" | "withdraw"
+  imageUrl: string;
   act1Highlight: string;
   act2Highlight: string;
   act3Highlight: string;
@@ -29,10 +30,21 @@ const INITIAL: FormState = {
   reservePrice: "",
   durationMinutes: "15",
   floorAction: "lottery",
+  imageUrl: "",
   act1Highlight: "",
   act2Highlight: "",
   act3Highlight: "",
 };
+
+/** Demo image pool — sellers pick one (no upload/generation cost for the demo). */
+const IMAGE_POOL: { url: string; label: string }[] = [
+  { url: "/items/wh1000xm5.png", label: "Headphones" },
+  { url: "/items/switch-oled-zelda.png", label: "Console" },
+  { url: "/items/airpods-pro-2.png", label: "Earbuds" },
+  { url: "/items/dyson-v15.png", label: "Vacuum" },
+  { url: "/items/lego-bugatti.png", label: "Lego" },
+  { url: "/items/fujifilm-x100vi.png", label: "Camera" },
+];
 
 const LISTING_FEE = 20; // coins
 
@@ -43,6 +55,7 @@ export default function SellPage() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<{ displayName: string } | null | undefined>(undefined);
   const [showAuth, setShowAuth] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -53,6 +66,35 @@ export default function SellPage() {
 
   function set(key: keyof FormState, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // ── AI draft: fill title + blurb + 3 acts from the item name (fal / Gemini) ──
+  async function generateCopy() {
+    if (!user) { setShowAuth(true); return; }
+    if (!form.title.trim()) { setError("Type the item name first, then generate."); return; }
+    setError(null);
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/listings/describe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: form.title.trim(), category: form.category }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "AI generation failed."); return; }
+      setForm((f) => ({
+        ...f,
+        title: data.title || f.title,
+        description: data.description || f.description,
+        act1Highlight: data.acts?.[0] || f.act1Highlight,
+        act2Highlight: data.acts?.[1] || f.act2Highlight,
+        act3Highlight: data.acts?.[2] || f.act3Highlight,
+      }));
+    } catch {
+      setError("Network error while generating. Try again.");
+    } finally {
+      setGenerating(false);
+    }
   }
 
   const startPriceNum = Number(form.startPrice) || 0;
@@ -86,6 +128,7 @@ export default function SellPage() {
           reservePrice: reservePriceNum,
           durationMinutes: Number(form.durationMinutes),
           floorAction: form.floorAction === "withdraw" ? "withdraw" : "lottery",
+          imageUrl: form.imageUrl || undefined,
           acts: [
             { actNo: 1, headline: form.act1Highlight.trim() },
             { actNo: 2, headline: form.act2Highlight.trim() },
@@ -198,6 +241,15 @@ export default function SellPage() {
               />
             </div>
 
+            <button
+              type="button"
+              onClick={generateCopy}
+              disabled={generating}
+              className="self-start flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-md border border-amber/30 text-amber hover:bg-amber/10 transition-colors disabled:opacity-50"
+            >
+              {generating ? "Drafting…" : "✨ Draft title, blurb & acts with AI"}
+            </button>
+
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="description">Description</label>
               <textarea
@@ -208,6 +260,28 @@ export default function SellPage() {
                 onChange={(e) => set("description", e.target.value)}
                 className="bg-muted border border-border rounded-md px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber resize-none"
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Image</label>
+              <div className="grid grid-cols-3 gap-2">
+                {IMAGE_POOL.map((img) => (
+                  <button
+                    key={img.url}
+                    type="button"
+                    onClick={() => set("imageUrl", img.url)}
+                    className={
+                      "relative rounded-md overflow-hidden border aspect-[4/3] transition-all " +
+                      (form.imageUrl === img.url ? "border-amber ring-1 ring-amber" : "border-border hover:border-amber/40")
+                    }
+                    aria-label={`Use ${img.label} image`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
+                    <span className="absolute bottom-0 inset-x-0 bg-background/70 text-[10px] font-mono text-muted-foreground py-0.5 text-center">{img.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">

@@ -26,8 +26,20 @@ export interface CreateAuctionRequest {
   durationMinutes: number;
   /** Floor behavior: 'lottery' (default) or 'withdraw' if unsold. */
   floorAction?: FloorAction;
+  /** Image chosen from the demo pool (path under /public). */
+  imageUrl?: string;
   acts: { actNo: 1 | 2 | 3; headline: string; detail?: string }[];
 }
+
+/** Allowed demo images — only these paths may be stored (no arbitrary URLs). */
+const IMAGE_POOL = new Set([
+  "/items/wh1000xm5.png",
+  "/items/switch-oled-zelda.png",
+  "/items/airpods-pro-2.png",
+  "/items/dyson-v15.png",
+  "/items/lego-bugatti.png",
+  "/items/fujifilm-x100vi.png",
+]);
 
 export async function POST(req: Request) {
   // Auth check
@@ -45,6 +57,8 @@ export async function POST(req: Request) {
 
   const { title, description, category, startPrice, reservePrice, durationMinutes, acts } = body;
   const floorAction: FloorAction = body.floorAction === "withdraw" ? "withdraw" : "lottery";
+  // Only accept an image from the known pool; ignore anything else.
+  const imageUrl = body.imageUrl && IMAGE_POOL.has(body.imageUrl) ? body.imageUrl : null;
 
   // Validation
   if (!title?.trim()) return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -68,16 +82,17 @@ export async function POST(req: Request) {
     // scheduling; we set it to NOW() as a placeholder — an admin can reschedule later.
     await query(
       `INSERT INTO auctions (
-        id, seller_user_id, title, description, category,
+        id, seller_user_id, title, description, category, image_url,
         start_price, reserve_price, duration_s,
         pause_windows, curve, burn_level, status, floor_action, starts_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'linear',0,'live',$10, NOW())`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'linear',0,'live',$11, NOW())`,
       [
         auctionId,
         session.id,
         title.trim(),
         description?.trim() ?? "",
         category ?? "Other",
+        imageUrl,
         startPrice,
         reservePrice,
         durationS,
