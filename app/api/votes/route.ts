@@ -20,10 +20,12 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { votesToTier } from "@/lib/price";
+import { votesToTier, armedToBrakeLevel } from "@/lib/price";
+import { fetchArmedCounts } from "@/lib/auctions";
 import type { VoteRequest } from "@/lib/types";
 
 const ALLOWED_ACT_NOS = [1, 2, 3] as const;
+const VOTE_COOLDOWN_MS = 10_000; // anti-spam; act-reveal gating provides the real pacing
 
 export async function POST(req: Request): Promise<NextResponse> {
   // ── Auth via session cookie ──────────────────────────────────────────────
@@ -46,18 +48,31 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  // ── Validate auction exists and is live ──────────────────────────────────
-  const auctionCheck = await query<{ status: string }>(
-    `SELECT status FROM auctions WHERE id = $1`,
+  // ── Validate auction + fetch start time ───────────────────────────────────
+  const auctionCheck = await query<{ status: string; starts_at: Date }>(
+    `SELECT status, starts_at FROM auctions WHERE id = $1`,
     [auctionId]
   );
-
   if (auctionCheck.rows.length === 0) {
     return NextResponse.json({ error: "Auction not found" }, { status: 404 });
   }
-  if (auctionCheck.rows[0].status !== "live") {
-    // Non-live auctions silently accept votes (demo mode / post-auction catch-up)
-    // Still count toward tier but don't block.
+  const startsAtMs = new Date(auctionCheck.rows[0].starts_at).getTime();
+  const now = Date.now();
+
+  // ── Gate 1: the act must already be REVEALED (vote during/after its spotlight) ──
+  const actRow = await query<{ reveal_offset_s: number }>(
+    `SELECT reveal_offset_s FROM acts WHERE auction_id = $1 AND act_no = $2`,
+    [auctionId, actNo]
+  );
+  if (actRow.rows.length > 0) {
+    const revealAtMs = startsAtMs + actRow.rows[0].reveal_offset_s * 1000;
+    if (now < revealAtMs) {
+      const waitS = Math.ceil((revealAtMs - now) / 1000);
+      return NextResponse.json(
+        { error: `Act ${actNo} hasn't been revealed yet. Watch for the spotlight in ${waitS}s.`, revealInS: waitS },
+        { status: 425 }
+      );
+    }
   }
 
   // ── Idempotency pre-check (DSQL-safe: no ON CONFLICT on non-PK unique) ──
@@ -67,6 +82,22 @@ export async function POST(req: Request): Promise<NextResponse> {
   );
 
   if (existing.rows.length === 0) {
+    // ── Gate 2: short cooldown between distinct votes (deliberate, not spam) ──
+    const lastVote = await query<{ created_at: Date }>(
+      `SELECT created_at FROM votes WHERE auction_id = $1 AND user_id = $2
+       ORDER BY created_at DESC LIMIT 1`,
+      [auctionId, userId]
+    );
+    if (lastVote.rows.length > 0) {
+      const sinceMs = now - new Date(lastVote.rows[0].created_at).getTime();
+      if (sinceMs < VOTE_COOLDOWN_MS) {
+        const waitS = Math.ceil((VOTE_COOLDOWN_MS - sinceMs) / 1000);
+        return NextResponse.json(
+          { error: `One vote at a time — decide carefully. Try again in ${waitS}s.`, cooldownS: waitS },
+          { status: 429 }
+        );
+      }
+    }
     await query(
       `INSERT INTO votes (id, auction_id, user_id, act_no, via_catchup, region_code)
        VALUES ($1, $2, $3, $4, false, null)`,
@@ -94,6 +125,29 @@ export async function POST(req: Request): Promise<NextResponse> {
         [randomUUID(), auctionId, userId]
       );
     }
+  }
+
+  // ── Demand brake: as armed bidders cross milestones, slow the price decay ──
+  // Ratchet the brake level UP only (keeps the price curve deterministic).
+  try {
+    const armedMap = await fetchArmedCounts([auctionId]);
+    const a = armedMap.get(auctionId);
+    const totalArmed = a ? a.tier3 + a.tier2 + a.tier1 : 0;
+    const brake = armedToBrakeLevel(totalArmed);
+    if (brake > 0) {
+      const cur = await query<{ burn_level: number }>(
+        `SELECT burn_level FROM auctions WHERE id = $1`,
+        [auctionId]
+      );
+      if ((cur.rows[0]?.burn_level ?? 0) < brake) {
+        await query(
+          `UPDATE auctions SET burn_level = $1, burn_effective = NOW() WHERE id = $2`,
+          [brake, auctionId]
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[votes] brake ratchet failed:", err);
   }
 
   return NextResponse.json({ totalVotes, tier, lotteryEligible: tier === 3 }, { status: 201 });

@@ -7,8 +7,44 @@
  * null on empty/error so the pages can fall back to mock data for the demo.
  */
 import { query } from "@/lib/db";
-import type { AuctionSummary, AuctionStatus, FloorAction } from "@/lib/types";
+import type { AuctionSummary, AuctionStatus, FloorAction, ArmedCounts } from "@/lib/types";
 import type { AuctionDecayParams, PauseWindow } from "@/lib/price";
+
+/**
+ * Real armed-tier counts derived from the votes table (auction_rollups is never
+ * written). A bidder's tier = their vote count: 1 vote → tier1, 2 → tier2,
+ * 3+ → tier3 (fully armed). Returns a Map keyed by auction id; missing ids = 0s.
+ */
+export async function fetchArmedCounts(ids: string[]): Promise<Map<string, ArmedCounts>> {
+  const map = new Map<string, ArmedCounts>();
+  if (ids.length === 0) return map;
+  try {
+    const { rows } = await query<{ auction_id: string; tier3: string; tier2: string; tier1: string }>(
+      `SELECT auction_id,
+              SUM(CASE WHEN vc >= 3 THEN 1 ELSE 0 END) AS tier3,
+              SUM(CASE WHEN vc  = 2 THEN 1 ELSE 0 END) AS tier2,
+              SUM(CASE WHEN vc  = 1 THEN 1 ELSE 0 END) AS tier1
+       FROM (
+         SELECT auction_id, user_id, COUNT(*) AS vc
+         FROM votes
+         WHERE auction_id = ANY($1)
+         GROUP BY auction_id, user_id
+       ) t
+       GROUP BY auction_id`,
+      [ids]
+    );
+    for (const r of rows) {
+      map.set(r.auction_id, {
+        tier3: Number(r.tier3) || 0,
+        tier2: Number(r.tier2) || 0,
+        tier1: Number(r.tier1) || 0,
+      });
+    }
+  } catch (err) {
+    console.error("[lib/auctions] fetchArmedCounts failed:", err);
+  }
+  return map;
+}
 
 export interface AuctionWithActsData extends AuctionSummary {
   acts: { actNo: 1 | 2 | 3; headline: string; detail: string }[];
@@ -109,7 +145,14 @@ export async function fetchLiveAuctions(
        LIMIT 20`
     );
     if (rows.length === 0) return null;
-    return { auctions: rows.map((row) => rowToSummary(row, nowMs)), serverTimeMs: nowMs };
+    const armed = await fetchArmedCounts(rows.map((r) => r.id));
+    const auctions = rows.map((row) => {
+      const s = rowToSummary(row, nowMs);
+      const a = armed.get(row.id);
+      if (a) s.armed = a;
+      return s;
+    });
+    return { auctions, serverTimeMs: nowMs };
   } catch (err) {
     console.error("[lib/auctions] fetchLiveAuctions failed:", err);
     return null;
@@ -141,7 +184,11 @@ export async function fetchAuctionWithActs(
       detail: a.detail ?? "",
     }));
 
-    return { ...rowToSummary(rows[0], nowMs), acts };
+    const summary = rowToSummary(rows[0], nowMs);
+    const armed = await fetchArmedCounts([id]);
+    const a = armed.get(id);
+    if (a) summary.armed = a;
+    return { ...summary, acts };
   } catch (err) {
     console.error("[lib/auctions] fetchAuctionWithActs failed:", err);
     return null;

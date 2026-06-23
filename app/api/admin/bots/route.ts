@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { withConnection } from "@/lib/db";
-import { computePrice, votesToTier, tierDelaySeconds } from "@/lib/price";
+import { computePrice, votesToTier, tierDelaySeconds, armedToBrakeLevel } from "@/lib/price";
 import { isAdmin } from "@/lib/adminAuth";
 import type { AuctionDecayParams, PauseWindow } from "@/lib/price";
 
@@ -31,12 +31,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { auctionId?: string; count?: number; maxDelayMs?: number };
+  let body: { auctionId?: string; count?: number; maxDelayMs?: number; claim?: boolean };
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { auctionId, count = 3, maxDelayMs = 1500 } = body;
+  // claim=true (default): bots race to claim. claim=false: bots only ARM (vote) so
+  // armed demand rises, the brake kicks in, and a human can claim at the held price.
+  const { auctionId, count = 3, maxDelayMs = 1500, claim = true } = body;
   if (!auctionId) return NextResponse.json({ error: "auctionId required" }, { status: 400 });
   const botCount = Math.min(10, Math.max(1, count));
 
@@ -124,6 +126,28 @@ export async function POST(req: NextRequest) {
       await client.query("COMMIT");
     }
   });
+
+  // ── Demand brake: bots just armed, so ratchet the brake up (votes API is bypassed) ──
+  const brake = armedToBrakeLevel(botCount);
+  if (brake > 0) {
+    await withConnection(async (client) => {
+      const cur = await client.query<{ burn_level: number }>(
+        `SELECT burn_level FROM auctions WHERE id = $1`, [auctionId]
+      );
+      if ((cur.rows[0]?.burn_level ?? 0) < brake) {
+        await client.query(
+          `UPDATE auctions SET burn_level = $1, burn_effective = NOW() WHERE id = $2`,
+          [brake, auctionId]
+        );
+      }
+      await client.query("COMMIT");
+    });
+  }
+
+  // ── Arm-only mode: bots voted, brake applied; no claim. Human can now claim high. ──
+  if (!claim) {
+    return NextResponse.json({ ok: true, armed: botCount, brakeLevel: brake, claimed: false });
+  }
 
   // ── Fire claims with random delays (real concurrent race) ─────────────────
   let pauseWindows: PauseWindow[] = [];

@@ -42,18 +42,18 @@ export async function POST(req: NextRequest) {
       // The 20-min cron + decay still carries some to the floor to show lottery/withdraw.
       const frac = Math.random() * 0.4;
       const startsAt = new Date(Date.now() - Math.floor(frac * item.durationS * 1000));
-      const burnLevel = Math.floor(Math.random() * 3); // 0–2
-      const burnEffective = burnLevel > 0 ? new Date(Date.now() - 90_000) : null;
-      const pauseWindows = actsToPauseWindows([
-        Math.floor(item.durationS * 0.25),
-        Math.floor(item.durationS * 0.5),
-        Math.floor(item.durationS * 0.75),
-      ]);
+      // Brake starts at 0 — real armed demand drives it up (votes route ratchets it).
+      const burnLevel = 0;
+      const burnEffective = null;
+      // Reveal acts early (8/20/35% of duration) so bidders can arm soon after entering.
+      const revealOffsets = [0.08, 0.2, 0.35].map((f) => Math.floor(item.durationS * f));
+      const pauseWindows = actsToPauseWindows(revealOffsets);
 
-      // Clean prior-cycle intent so the new race starts fresh.
+      // Clean prior-cycle intent + acts so the new race starts fresh with current offsets.
       await client.query(`DELETE FROM votes WHERE auction_id = $1`, [item.id]);
       await client.query(`DELETE FROM lottery_entries WHERE auction_id = $1`, [item.id]);
       await client.query(`DELETE FROM claims WHERE auction_id = $1`, [item.id]);
+      await client.query(`DELETE FROM acts WHERE auction_id = $1`, [item.id]);
       await client.query("COMMIT");
 
       await client.query(
@@ -81,24 +81,18 @@ export async function POST(req: NextRequest) {
         [
           item.id, DEMO_SELLER_ID, item.title, item.description, item.imageUrl, item.category,
           item.startPrice, item.reservePrice, item.durationS, startsAt.toISOString(),
-          JSON.stringify(pauseWindows), burnLevel, burnEffective ? burnEffective.toISOString() : null,
+          JSON.stringify(pauseWindows), burnLevel, burnEffective,
           item.floorAction,
         ]
       );
 
-      // Acts (pre-check dedup — DSQL has no ON CONFLICT on non-PK unique index).
+      // Acts — fresh insert each cycle (cleared above) with the early reveal offsets.
       for (let i = 1; i <= 3; i++) {
-        const { rows: existing } = await client.query(
-          `SELECT id FROM acts WHERE auction_id = $1 AND act_no = $2 LIMIT 1`,
-          [item.id, i]
+        await client.query(
+          `INSERT INTO acts (id, auction_id, act_no, headline, detail, reveal_offset_s)
+           VALUES (gen_random_uuid(), $1, $2, $3, '', $4)`,
+          [item.id, i, item.highlights[i - 1], revealOffsets[i - 1]]
         );
-        if (existing.length === 0) {
-          await client.query(
-            `INSERT INTO acts (id, auction_id, act_no, headline, detail, reveal_offset_s)
-             VALUES (gen_random_uuid(), $1, $2, $3, '', $4)`,
-            [item.id, i, item.highlights[i - 1], Math.floor(item.durationS * (i / 4))]
-          );
-        }
       }
       await client.query("COMMIT");
       results.push(`relisted ${item.id} (burn ${burnLevel}, ${item.floorAction})`);

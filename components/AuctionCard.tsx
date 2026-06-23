@@ -17,11 +17,12 @@ interface AuctionCardProps {
   priority?: boolean;
 }
 
+// Demand brake: higher armed demand slows the drop (multiplier < 1).
 const BURN_LABEL: Record<number, string | null> = {
   0: null,
-  1: "BURN ×1.15",
-  2: "BURN ×1.35",
-  3: "BURN ×1.6",
+  1: "HOLD ×0.75",
+  2: "HOLD ×0.55",
+  3: "HOLD ×0.4",
 };
 
 export function AuctionCard({ auction, clockOffsetMs, priority = false }: AuctionCardProps) {

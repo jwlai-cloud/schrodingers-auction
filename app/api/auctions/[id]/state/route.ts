@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { resolveFloorIfNeeded } from "@/lib/floor";
+import { fetchArmedCounts } from "@/lib/auctions";
 import type { AuctionStateResponse, AuctionStatus, WonVia } from "@/lib/types";
 import type { AuctionDecayParams, PauseWindow } from "@/lib/price";
 
@@ -132,15 +133,15 @@ export async function GET(
     // leave as empty objects
   }
 
+  // Real armed counts from votes (auction_rollups is never populated).
+  const armedMap = await fetchArmedCounts([id]);
+  const armed = armedMap.get(id) ?? { tier3: 0, tier2: 0, tier1: 0 };
+
   const body: AuctionStateResponse = {
     auctionId: row.id,
     status: row.status,
     decayParams,
-    armed: {
-      tier3: row.armed_3 ?? 0,
-      tier2: row.armed_2 ?? 0,
-      tier1: row.armed_1 ?? 0,
-    },
+    armed,
     spectatorsEst: row.spectators_est ?? 0,
     lotteryCount: row.lottery_count ?? 0,
     reactions5s,

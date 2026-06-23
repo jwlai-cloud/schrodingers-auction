@@ -23,10 +23,11 @@
  *    is frozen. Pause windows are [{from, until}] intervals in *elapsed
  *    active seconds* (i.e. they consume no decay budget).
  *
- * 3. **Burn level** acceleration
- *    Demand burn (triggered at armed-bidder milestones 25/50/100) applies
- *    a multiplier to the decay rate from `burnEffectiveAt` onward.
- *    Burn level 0 → ×1.0, level 1 → ×1.15, level 2 → ×1.35, level 3 → ×1.6
+ * 3. **Demand brake** (burnLevel reused as brake level)
+ *    As more bidders arm (milestones 5/15/30), the decay rate is SLOWED by a
+ *    multiplier < 1 from `burnEffectiveAt` onward, so hot items hold a high
+ *    price instead of fire-selling.
+ *    Level 0 → ×1.0, level 1 → ×0.75, level 2 → ×0.55, level 3 → ×0.4
  *
  * 4. **Reserve (floor) price**
  *    The price never drops below `reservePrice` (triggers lottery window).
@@ -84,12 +85,24 @@ export interface PriceResult {
 
 // ── Burn multipliers ─────────────────────────────────────────────────────────
 
+// Demand brake: as more bidders arm, the price decays SLOWER (multiplier < 1),
+// so hot items hold a high price instead of fire-selling. burnLevel is reused as
+// the brake level (0 = no brake). Triggered by armed milestones — see
+// armedToBrakeLevel. burnEffectiveAtMs marks when the current brake took effect.
 const BURN_MULTIPLIER: Record<0 | 1 | 2 | 3, number> = {
-  0: 1.0,
-  1: 1.15,
-  2: 1.35,
-  3: 1.6,
+  0: 1.0,  // no demand yet — normal decay
+  1: 0.75, // warming — 25% slower
+  2: 0.55, // hot — 45% slower
+  3: 0.4,  // on fire — 60% slower, price barely moves
 };
+
+/** Map a total armed-bidder count to a demand-brake level (0–3). Ratchets up only. */
+export function armedToBrakeLevel(totalArmed: number): 0 | 1 | 2 | 3 {
+  if (totalArmed >= 30) return 3;
+  if (totalArmed >= 15) return 2;
+  if (totalArmed >= 5) return 1;
+  return 0;
+}
 
 // ── Core function ─────────────────────────────────────────────────────────────
 

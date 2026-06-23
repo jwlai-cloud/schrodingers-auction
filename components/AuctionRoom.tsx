@@ -22,9 +22,20 @@ type ClaimState = "idle" | "countdown" | "submitting" | "won" | "lost";
 
 const REACTIONS = ["🔥", "👀", "💀", "🤑"] as const;
 
+// Demand-brake badge: higher demand slows the drop (multiplier < 1).
 const BURN_LABEL: Record<number, string | null> = {
-  0: null, 1: "BURN ×1.15", 2: "BURN ×1.35", 3: "BURN ×1.6",
+  0: null, 1: "DEMAND HOLD ×0.75", 2: "DEMAND HOLD ×0.55", 3: "DEMAND HOLD ×0.4",
 };
+
+/** Escalating urgency copy driven by how many bidders are armed. */
+function armedHeat(total: number): { line: string; tone: "hot" | "warm" | "cool" } {
+  if (total >= 50) return { line: `🔥 ${total} armed — this sells any second. Claim now or lose it.`, tone: "hot" };
+  if (total >= 20) return { line: `⚡ ${total} armed and climbing — the room is heating up fast.`, tone: "hot" };
+  if (total >= 8)  return { line: `👀 ${total} armed — momentum is building. Don't blink.`, tone: "warm" };
+  if (total >= 3)  return { line: `${total} bidders armed — the race is forming.`, tone: "warm" };
+  if (total >= 1)  return { line: `${total} armed so far — early-mover advantage is yours.`, tone: "cool" };
+  return { line: `Be the first to arm — vote on the seller's reveals to earn claim rights.`, tone: "cool" };
+}
 
 export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
   // Capture the server-clock offset ONCE at mount. Computing it inline on every
@@ -78,23 +89,35 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
     return idx >= 0 ? ((idx + 1) as 1 | 2 | 3) : null;
   })();
 
-  // ── Votes — real API with local-state optimistic increment ───────────────
+  // ── Votes — real API; reconcile with the server's true count ──────────────
   const [votes, setVotes] = useState(0);
+  const [voteMsg, setVoteMsg] = useState<string | null>(null);
   const tier = votesToTier(votes);
 
   async function castVote(actNo: 1 | 2 | 3) {
     if (!user) { setShowAuth(true); return; }
-    // Optimistic update
-    setVotes((v) => Math.min(3, v + 1));
+    setVoteMsg(null);
+    const prev = votes;
+    setVotes((v) => Math.min(3, v + 1)); // optimistic
     try {
-      await fetch("/api/votes", {
+      const res = await fetch("/api/votes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ auctionId: auction.id, actNo }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        if (typeof data.totalVotes === "number") setVotes(Math.min(3, data.totalVotes));
+      } else {
+        // Rejected (act not revealed yet, cooldown, etc.) — roll back + explain.
+        setVotes(prev);
+        setVoteMsg(data.error ?? "Vote not accepted.");
+        setTimeout(() => setVoteMsg(null), 4000);
+      }
     } catch {
-      // Roll back on network error
-      setVotes((v) => Math.max(0, v - 1));
+      setVotes(prev);
+      setVoteMsg("Network error — try again.");
+      setTimeout(() => setVoteMsg(null), 4000);
     }
   }
   const claimDelay = tierDelaySeconds(tier);
@@ -190,13 +213,14 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
     setTimeout(() => setBursts((prev) => prev.filter((b) => b.id !== id)), 1800);
   }
 
-  // ── Live counters (simulated drift) ──────────────────────────────────────
-  const [liveArmed, setLiveArmed] = useState(totalArmed);
-  const [liveWatching, setLiveWatching] = useState(auction.spectatorsEst);
+  // ── Live armed counts (REAL, from votes via /state) + cosmetic watcher drift ──
+  const [armedCounts, setArmedCounts] = useState(armed);
+  const liveArmed = armedCounts.tier3 + armedCounts.tier2 + armedCounts.tier1;
+  const heat = armedHeat(liveArmed);
+  const [liveWatching, setLiveWatching] = useState(auction.spectatorsEst || 0);
   useEffect(() => {
     const id = setInterval(() => {
-      setLiveArmed((n) => Math.max(0, n + (Math.random() < 0.4 ? 1 : 0) - (Math.random() < 0.1 ? 1 : 0)));
-      setLiveWatching((n) => Math.max(100, n + Math.floor((Math.random() - 0.48) * 20)));
+      setLiveWatching((n) => Math.max(50, n + Math.floor((Math.random() - 0.45) * 12)));
     }, 3000);
     return () => clearInterval(id);
   }, []);
@@ -212,6 +236,7 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
         const r = await fetch(`/api/auctions/${auction.id}/state`);
         if (!r.ok) return;
         const data = await r.json();
+        if (data.armed) setArmedCounts(data.armed); // live armed counts, always update
         if (claimState !== "idle") return;
         if (data.status === "unsold" || data.status === "expired") {
           setEndedUnsold(true);
@@ -478,6 +503,40 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
 
           {/* ── Right column ────────────────────────────── */}
           <div className="flex flex-col gap-5">
+            {/* Demand / armed urgency + tier breakdown */}
+            <div
+              className={cn(
+                "rounded-lg border p-4",
+                heat.tone === "hot"
+                  ? "border-amber/50 bg-amber/10"
+                  : heat.tone === "warm"
+                  ? "border-amber/30 bg-amber/5"
+                  : "border-border bg-card"
+              )}
+            >
+              <p
+                className={cn(
+                  "text-sm font-semibold",
+                  heat.tone === "hot" ? "text-amber animate-pulse-slow" : heat.tone === "warm" ? "text-amber" : "text-foreground"
+                )}
+              >
+                {heat.line}
+              </p>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                {([
+                  { n: armedCounts.tier3, label: "fully armed", sub: "3 votes" },
+                  { n: armedCounts.tier2, label: "armed", sub: "2 votes" },
+                  { n: armedCounts.tier1, label: "warming", sub: "1 vote" },
+                ] as const).map((t) => (
+                  <div key={t.sub} className="rounded-md border border-border bg-background/40 py-2">
+                    <p className="font-mono text-xl font-bold text-foreground">{t.n}</p>
+                    <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{t.label}</p>
+                    <p className="text-[9px] font-mono text-muted-foreground/70">{t.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Act spotlight banner */}
             {activeActNo && (
               <div className="rounded-lg border border-amber/30 bg-amber/5 p-4">
@@ -565,6 +624,11 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
                 >
                   Vote for Act {votes + 1} ({votes}/3)
                 </button>
+              )}
+              {voteMsg && (
+                <p className="mt-2 text-xs font-mono text-amber text-center animate-pulse-slow">
+                  {voteMsg}
+                </p>
               )}
             </div>
 
