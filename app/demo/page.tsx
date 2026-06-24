@@ -2,7 +2,8 @@
 
 /**
  * app/demo/page.tsx — Interactive judge walkthrough / demo script.
- * Kept accurate against the actual live build (AuctionRoom, Navbar, sell form, auth).
+ * Kept accurate against the actual live build (AuctionRoom, Navbar, sell form,
+ * auth, demand brake, act-gated voting, bot races, AI listing copy).
  */
 import Link from "next/link";
 import { useState } from "react";
@@ -22,29 +23,17 @@ const STEPS = [
     tagline: "Show the room before anything else.",
     mins: 1.5,
     script: [
-      "Open the lobby at /. Six live auctions, prices falling in real time — every viewer on earth sees the same number.",
-      "The hero strip reads: 'The price falls. One person claims it.' Three how-it-works chips explain the mechanic without a paragraph of copy.",
-      "The 'Hottest right now' featured banner picks the auction with the most spectators — currently the Lego Bugatti Chiron at 6,750 watching with BURN ×1.6. Point to the BURN badge: demand from armed bidders has accelerated the decay.",
-      "Click a category filter chip (e.g. 'Gaming'). The grid updates instantly — no page reload, no spinner. That is a client-side state change in LobbyClient.",
-      "Key message: this is a spectator sport before it is an auction. The crowd numbers are not decorations — they are part of the information game.",
+      "Open the lobby at /. Six live auctions, prices falling in real time — every viewer on earth computes the same number from the same parameters.",
+      "The hero reads: 'The price falls. One person claims it.' Three how-it-works chips explain the mechanic without a paragraph of copy.",
+      "Some cards show a DEMAND HOLD badge. That is the demand brake: as more bidders arm, the price decay SLOWS, so a hot item holds a high price instead of fire-selling.",
+      "Click a category chip (e.g. 'Gaming'). The grid filters instantly — no reload. That is client-side state in LobbyClient.",
+      "Key message: this is a spectator sport before it is an auction. The crowd numbers are not decoration — they are the information game.",
     ],
     demo: [
-      {
-        action: "Point to the featured banner",
-        what: "Lego Bugatti — 6,750 watching, BURN ×1.6 badge, live falling price",
-      },
-      {
-        action: "Click 'Gaming' filter chip",
-        what: "Grid instantly narrows to Nintendo Switch OLED only — no reload",
-      },
-      {
-        action: "Watch any price ticker",
-        what: "Price ticks down every second — same number globally",
-      },
-      {
-        action: "Point to the Navbar",
-        what: "Global armed count (amber shield) + watching count — live aggregates",
-      },
+      { action: "Point to a DEMAND HOLD badge", what: "Demand is slowing this item's drop — visible support, not a CSS effect" },
+      { action: "Click 'Gaming' filter chip", what: "Grid narrows instantly — no reload" },
+      { action: "Watch any price ticker", what: "Ticks down every second — same number globally, holds across refresh" },
+      { action: "Point to the Navbar", what: "Global armed + watching counts — live aggregates" },
     ],
   },
 
@@ -57,24 +46,14 @@ const STEPS = [
     mins: 1,
     script: [
       "Click 'Sign in' in the top-right Navbar. The AuthModal slides in.",
-      "The default tab is 'Sign in'. Click 'No account? Sign up' to switch to registration.",
-      "Fill in: display name, email, password. Hit 'Create account'.",
-      "On success: the modal closes, the Navbar coin balance lights up green — 50,000 demo coins. No card, no friction.",
-      "Auth state is polled every 3 seconds so any component already open (like an auction room) updates immediately without a page reload.",
+      "Switch to 'Sign up'. Fill in display name, email, password. Hit 'Create account'.",
+      "On success the modal closes and the Navbar coin balance lights up green — 50,000 demo coins. No card, no friction.",
+      "Auth is polled every 3s, so an auction room already open updates immediately without a reload.",
     ],
     demo: [
-      {
-        action: "Click 'Sign in' in the Navbar",
-        what: "AuthModal opens — two fields, 'Sign in' button",
-      },
-      {
-        action: "Click 'No account? Sign up'",
-        what: "Form adds a 'Display name' field; button becomes 'Create account'",
-      },
-      {
-        action: "Submit the form",
-        what: "Modal closes; Navbar shows green coin balance and 'Sign out'",
-      },
+      { action: "Click 'Sign in' in the Navbar", what: "AuthModal opens" },
+      { action: "Switch to 'Sign up'", what: "Adds a 'Display name' field; button becomes 'Create account'" },
+      { action: "Submit the form", what: "Modal closes; Navbar shows green coin balance + 'Sign out'" },
     ],
   },
 
@@ -83,32 +62,20 @@ const STEPS = [
     no: 3,
     title: "Enter an Auction Room",
     url: "/auctions/11111111-0000-0000-0000-000000000005",
-    tagline: "Lego Bugatti Chiron — most watched, BURN ×1.6 active.",
+    tagline: "Everything the room tells you without a tutorial.",
     mins: 1.5,
     script: [
-      "Click the Lego Bugatti Chiron card (or the featured banner). You land in the auction room.",
-      "Left column: product image with LIVE + BURN ×1.6 badges overlaid. Four emoji reaction buttons below. Live stats: watching count, armed count, your tier.",
-      "Right column: live price card with falling number, amber progress bar draining left-to-right, and 'floor hidden' label — Schrodinger's reserve.",
-      "Below the price: the arm status panel. Three act boxes, all showing their act number in grey — empty. The claim button reads 'Sign in to claim' (if signed out) or 'Must arm first' (if signed in, 0 votes).",
-      "Key message: the room communicates everything without a tutorial. The grey boxes say 'earn this'. The falling number says 'you have limited time'.",
+      "Open any auction. Left column: product image with a LIVE badge (and a DEMAND HOLD badge once demand is high). Reaction emojis below.",
+      "Right column, top: the demand panel. An escalating urgency line ('👀 N armed — momentum is building') and a live breakdown — how many bidders are fully armed (3 votes), armed (2), and warming (1). These counts are REAL, aggregated from the votes table.",
+      "Below: the live price card — falling number, amber progress bar, and a 'floor hidden' label. The reserve is Schrodinger until the auction resolves.",
+      "Then the arm panel: three act boxes (grey = not yet earned) and the claim button — 'Sign in to claim', or 'Must arm first' at 0 votes.",
+      "Key message: the grey boxes say 'earn this'; the falling number says 'limited time'; the armed breakdown says 'you are not alone'.",
     ],
     demo: [
-      {
-        action: "Open the Lego Bugatti room from the lobby",
-        what: "LIVE badge, BURN ×1.6 badge on image; arm panel shows 3 empty grey boxes",
-      },
-      {
-        action: "Tap a reaction emoji (e.g. 🔥)",
-        what: "Emoji floats up over the product image — crowd atmosphere",
-      },
-      {
-        action: "Point to the price progress bar",
-        what: "'floor hidden' label — reserve is Schrodinger until claimed",
-      },
-      {
-        action: "Show the claim button",
-        what: "Grey 'Must arm first' if signed in with 0 votes; amber 'Sign in to claim' if signed out",
-      },
+      { action: "Open the Lego Bugatti room", what: "LIVE badge; demand panel with the live armed breakdown" },
+      { action: "Tap a reaction emoji (🔥)", what: "Emoji floats up over the image — crowd atmosphere" },
+      { action: "Point to the urgency line + tier counts", what: "Real armed numbers by tier, not cosmetic" },
+      { action: "Show the claim button", what: "'Must arm first' at 0 votes; 'Sign in to claim' if signed out" },
     ],
   },
 
@@ -117,70 +84,41 @@ const STEPS = [
     no: 4,
     title: "Arm Yourself",
     url: null,
-    tagline: "Attention is the currency. Three votes, three act slots.",
+    tagline: "Attention is the currency — and it's deliberate.",
     mins: 1.5,
     script: [
-      "In a live auction, a vote button appears during each act spotlight (when the price pauses for 10 seconds). One click per act. Three acts = up to three votes.",
-      "For this demo, use the 'Vote for Act 1 (0/3)' button at the bottom of the arm panel to earn votes on demand — without waiting for an act boundary. The label updates after each click.",
-      "Click it once: Act 1 slot turns green. Button now reads 'Vote for Act 2 (1/3)'. Tier 1 — 5s delay on claim.",
-      "Click again: Act 2 turns green. Button reads 'Vote for Act 3 (2/3)'. Tier 2 — 2s delay.",
-      "Click a third time: Act 3 turns green, button disappears. 'CLAIM NOW' turns amber. '3 votes — instant claim. You are fully armed.'",
-      "Each vote also reveals the seller's act highlight below the product image. Point to the revealed 'Act 1', 'Act 2', 'Act 3' cards as they appear.",
-      "Key message: the global armed counter in the Navbar ticks up — every vote is public information. That number is the pressure gauge.",
+      "You earn claim rights by voting on the seller's act reveals. Voting is deliberate: you can only vote for an act once it has been revealed, and there's a short cooldown between votes — no mashing to instant-armed.",
+      "Act 1 is revealed at the start, so you can cast your first vote right away; acts 2 and 3 unlock as the auction progresses (their spotlights pause the price for a moment).",
+      "Each vote climbs a tier: 1 vote → 5s claim delay, 2 votes → 2s, 3 votes → instant claim, fully armed. Try to vote before an act is revealed and the room tells you to wait.",
+      "Watch the demand panel: as the armed count rises across all bidders, the DEMAND HOLD badge appears and the price decay visibly slows. Demand props the price up.",
+      "For a fast demo, arm a whole fleet at once with the admin bot race (next step) instead of waiting out the cooldown.",
     ],
     demo: [
-      {
-        action: "Click 'Vote for Act 1 (0/3)' at the bottom of the arm panel",
-        what: "Act 1 box goes green; button updates to 'Vote for Act 2 (1/3)'; tier: '1 vote — 5s delay'",
-      },
-      {
-        action: "Click twice more in succession",
-        what: "All three boxes green; vote button disappears; 'CLAIM NOW' turns amber; '3 votes — instant claim'",
-      },
-      {
-        action: "Scroll down on the left column",
-        what: "'Revealed so far' section shows all three act highlight cards",
-      },
-      {
-        action: "Point to armed count in stats row",
-        what: "Live armed count — real aggregated vote data, not cosmetic",
-      },
+      { action: "Vote for Act 1 (revealed immediately)", what: "Act 1 box turns green; tier 1 — 5s delay" },
+      { action: "Try to vote again right away", what: "Cooldown message — voting is deliberate by design" },
+      { action: "Run an arm-only bot fleet (admin)", what: "Armed count jumps; DEMAND HOLD badge appears; price slows" },
+      { action: "Point to the armed breakdown", what: "Real per-tier counts climb live" },
     ],
   },
 
   // ── 5 ───────────────────────────────────────────────────
   {
     no: 5,
-    title: "Claim",
-    url: null,
-    tagline: "One button. One winner, ever.",
+    title: "The One-Winner Race & Claim",
+    url: "/admin",
+    tagline: "One button. One winner, ever — proven with a real race.",
     mins: 1.5,
     script: [
-      "'CLAIM NOW' is amber and full-width. The current price is displayed live below it.",
-      "If tier 3 (fully armed): claim is instant. The moment you press, the request fires.",
-      "If tier 2 (2 votes): a countdown appears — '2... 1...' — then the request fires. The price keeps falling for everyone else during your countdown.",
-      "The server evaluates: status = live, winner_user_id IS NULL, price > reserve, balance >= price. The first transaction to commit wins.",
-      "Win screen: 'You claimed it.' — item name, price in coins. Coins debited.",
-      "Loss screen: '0.4 seconds.' — 'Someone on the other side of the planet was faster. You were one of N armed — they got it.'",
-      "Key message: one guarded UPDATE transaction across a multi-region Aurora DSQL cluster. Two simultaneous claims, one commit, one abort — the database is the referee.",
+      "From /admin, run a bot race: it provisions real DB users, arms them, and fires their claims at random millisecond offsets — a genuine concurrent race against Aurora DSQL, no real crowd needed.",
+      "The server resolves it with one guarded UPDATE: status = live, winner_user_id IS NULL, price > reserve, balance >= price. Exactly one transaction commits; the rest abort on an OCC serialization conflict. That abort IS the loss.",
+      "Now claim it yourself. Win screen: 'You claimed it.' — item name, price, coins debited. Lose to a bot and the loss screen shows the REAL winner's name and the REAL millisecond gap, read from the database — not a hardcoded number.",
+      "Arm-only variant: run the fleet without claiming, watch the demand brake hold the price high, then claim at that held price yourself.",
+      "Key message: a single conditional UPDATE across a multi-region cluster is the referee. Two simultaneous claims, one commit, one abort.",
     ],
     demo: [
-      {
-        action: "Watch the price fall for 10 seconds",
-        what: "Tension — you are fully armed, price dropping, others watching",
-      },
-      {
-        action: "Hit 'CLAIM NOW' (tier 3 — instant)",
-        what: "No delay; 'Submitting...' flash, then win or loss screen",
-      },
-      {
-        action: "Show the win screen",
-        what: "'You claimed it.' — item name, price, 'Back to lobby' link",
-      },
-      {
-        action: "Or show the loss screen",
-        what: "'0.4 seconds.' — the precision makes the near-miss feel real",
-      },
+      { action: "Admin → run bot race on an auction", what: "N bots arm + claim concurrently; response names the one winner" },
+      { action: "Claim the same item yourself", what: "Win screen, or loss screen with the real winner + real ms gap" },
+      { action: "Run an arm-only fleet, then claim", what: "Brake holds the price; you buy high — the seller's win" },
     ],
   },
 
@@ -189,34 +127,20 @@ const STEPS = [
     no: 6,
     title: "List an Item — Seller Flow",
     url: "/sell",
-    tagline: "Close the loop: show who creates these auctions.",
+    tagline: "Close the loop: who creates these, with AI help.",
     mins: 1.5,
     script: [
-      "Navigate to /sell or click 'List item' in the Navbar (top-right, visible on desktop).",
-      "The form is auth-gated: if not signed in, a banner appears with a 'Sign in' button. Sign in required before submission.",
-      "Fill in: item title, description, category (8 options), start price, reserve (floor) price, duration (slider: 5–60 min).",
-      "The fee estimate updates live: formula is spread × 10% + start × 5%. Point to it: transparent economics, no surprises.",
-      "Write three act highlights — one sentence each. These are your three moments of stage time. The escalation pattern works best: good → better → 'I need this.'",
-      "Hit 'Submit listing'. The form POST goes to /api/auctions/create which writes to Aurora DSQL. Confirmation screen shows the listing accepted.",
-      "Flat listing fee: 20 coins, charged on submission win or lose.",
+      "Go to /sell (auth-gated). Type an item name, then hit '✨ Draft title, blurb & acts with AI' — fal's any-llm (Gemini Flash) drafts the title, description, and three act highlights. Edit anything before listing.",
+      "Pick a product image from the pool (no upload needed for the demo). Set start price, reserve (floor), and duration.",
+      "Choose the floor behavior: a floor lottery (a random fully-armed bidder wins at reserve — the seller always sells) or withdraw (taken down unsold, relist later — never sell below your floor).",
+      "The fee estimate updates live (spread × 10% + start × 5%). Hit 'Submit listing' — it writes to Aurora DSQL and goes live immediately.",
+      "Key message: the engagement mechanics exist to keep claims high on the curve, which is exactly what makes sellers richer.",
     ],
     demo: [
-      {
-        action: "Navigate to /sell via 'List item' in Navbar",
-        what: "Full listing form; auth banner visible if signed out",
-      },
-      {
-        action: "Set start 500, reserve 80 — watch the fee estimate",
-        what: "Live preview: spread = 420, fee = 420×0.1 + 500×0.05 = 67 coins",
-      },
-      {
-        action: "Write 3 act highlights (escalating)",
-        what: "Act 1: condition; Act 2: rarity; Act 3: 'never been opened'",
-      },
-      {
-        action: "Submit the form",
-        what: "'Listing submitted' confirmation screen — 20 coins reserved",
-      },
+      { action: "Type a name, click '✨ Draft with AI'", what: "Title + blurb + 3 acts fill in (fal / Gemini)" },
+      { action: "Pick an image + set prices", what: "Live fee preview; reserve must be below start" },
+      { action: "Choose floor: lottery or withdraw", what: "The seller decides what happens at the floor" },
+      { action: "Submit the form", what: "Written to Aurora DSQL; appears live in the lobby" },
     ],
   },
 
@@ -228,29 +152,17 @@ const STEPS = [
     tagline: "The 'why this works globally' moment.",
     mins: 1,
     script: [
-      "The price is a deterministic pure function: price(t) = startPrice × (1 − elapsed/duration) × burnMultiplier, clamped at reserve. Same parameters + server clock = identical price on every device in every timezone with no coordination.",
-      "Claims are a single conditional UPDATE in Amazon Aurora DSQL — a distributed SQL database with strongly consistent active-active replication across regions.",
-      "'Two users in Sydney and Stockholm claim the same item in the same millisecond. DSQL commits exactly one. The other aborts with an OCC serialization conflict.' That abort is the loss receipt.",
-      "Votes are individually stored and deduplicated by UNIQUE(auction_id, user_id, act_no). The armed counter you panic about is the truth.",
-      "No websockets needed: clients poll /api/auctions/:id/state every second. The response is ~1 KB and served from the Vercel edge cache at s-maxage=1. A million viewers generate ~1 origin request per second per auction.",
+      "The price is a deterministic pure function of (start, floor, duration, pauses, demand-brake, server clock) — same inputs, identical price on every device in every timezone, stored nowhere. The brake slows decay as armed demand rises.",
+      "Claims are a single conditional UPDATE in Amazon Aurora DSQL — strongly consistent, active-active across regions. Two users claim the same item in the same millisecond; DSQL commits exactly one, the other aborts. The abort is the loss receipt.",
+      "Votes are stored individually and deduped by UNIQUE(auction_id, user_id, act_no); armed counts are aggregated from them on read.",
+      "Floor resolution is lazy (no cron): when the price reaches the reserve unclaimed, the next state read either runs the lottery or withdraws the item — guarded, so it resolves once.",
+      "No websockets: clients poll a ~1 KB state endpoint and compute the price themselves, so a million viewers never touch the database for the falling clock.",
     ],
     demo: [
-      {
-        action: "Open DevTools → Network tab",
-        what: "/api/auth/me polling every 3s — session is server-authoritative, not localStorage",
-      },
-      {
-        action: "Point to the BURN ×1.6 badge",
-        what: "Burn level is a parameter in the price function, not a CSS effect — it changes the actual price",
-      },
-      {
-        action: "Say the price formula aloud",
-        what: "price(t) = start × (1 − elapsed/duration) × burnMultiplier, clamped at reserve",
-      },
-      {
-        action: "Mention Aurora DSQL",
-        what: "Multi-region strong consistency — the only way the one-winner guarantee is honest",
-      },
+      { action: "Open DevTools → Network", what: "Light polling; session is server-authoritative, not localStorage" },
+      { action: "Point to a DEMAND HOLD badge", what: "Brake is a parameter in the price function — it changes the real decay rate" },
+      { action: "Say the price model aloud", what: "Deterministic f(params, clock); demand brake slows it; clamped at reserve" },
+      { action: "Mention Aurora DSQL", what: "Multi-region strong consistency — the only honest way to guarantee one winner" },
     ],
   },
 
@@ -259,28 +171,18 @@ const STEPS = [
     no: 8,
     title: "Verify: Real Data in Aurora DSQL",
     url: "/admin",
-    tagline: "Prove it is not hardcoded. The data is live in the database.",
+    tagline: "Prove it is not hardcoded.",
     mins: 0.5,
     script: [
-      "Navigate to /admin — the DB browser. This runs SELECT queries directly against Aurora DSQL via the @aws-sdk/dsql-signer IAM-authenticated connection.",
-      "Run: SELECT id, title, status, start_price FROM auctions ORDER BY created_at DESC LIMIT 6. You will see the six seeded demo auctions.",
-      "Run: SELECT count(*) FROM users. Shows the accounts created during this demo session.",
-      "Run: SELECT * FROM wallets LIMIT 5. Shows real coin balances — debited on claim, credited on listing.",
-      "Key message: nothing is mocked at this layer. The lobby uses the same data in production.",
+      "Go to /admin — the DB browser runs read-only SELECTs directly against Aurora DSQL over an IAM-authenticated connection (admin-gated; no default secret).",
+      "Run: SELECT id, title, status, start_price, burn_level FROM auctions ORDER BY created_at DESC. The six demo auctions; burn_level is the live demand-brake level.",
+      "Run: SELECT count(*) FROM users — includes accounts created this session. Run: SELECT * FROM wallets LIMIT 5 — real balances, debited on claim.",
+      "Key message: nothing is mocked at this layer. The lobby and rooms read the same rows.",
     ],
     demo: [
-      {
-        action: "Open /admin",
-        what: "DB query browser — SELECT only, no destructive queries possible",
-      },
-      {
-        action: "Run: SELECT id, title FROM auctions ORDER BY created_at DESC",
-        what: "Six rows — the seed data is real Aurora DSQL rows, not hardcoded JSON",
-      },
-      {
-        action: "Run: SELECT count(*) FROM users",
-        what: "Count includes any accounts created during this demo — proves live writes",
-      },
+      { action: "Open /admin", what: "Query browser — SELECT only, semicolons blocked, password_hash stripped" },
+      { action: "SELECT id, title, burn_level FROM auctions", what: "Six real rows; brake level visible" },
+      { action: "SELECT count(*) FROM users", what: "Includes this session's signups — proves live writes" },
     ],
   },
 ];
@@ -445,20 +347,25 @@ export default function DemoPage() {
           })}
         </div>
 
-        {/* ── Quick-reference price formula ── */}
+        {/* ── Quick-reference price model ── */}
         <div className="mt-8 rounded-lg border border-border bg-card p-5">
           <p className="font-mono text-xs uppercase tracking-widest text-amber mb-3">
-            Price formula — quick reference
+            Price model — quick reference
           </p>
           <code className="text-xs font-mono text-foreground block bg-muted rounded-md p-3 leading-relaxed whitespace-pre-wrap">
 {`price(t) =
   startPrice
-  × (1 − elapsedActiveSeconds / durationSeconds)
-  × burnMultiplier(burnLevel)
+  × (1 − effectiveActiveSeconds / durationSeconds)
   clamped to [reservePrice, startPrice]
 
-burnMultiplier: 0 → 1.0 | 1 → 1.15 | 2 → 1.35 | 3 → 1.6
-pauseWindows:   price decay pauses at act 1/4, 1/2, 3/4 marks (10s each)`}
+effectiveActiveSeconds:
+  • excludes pause windows (act spotlights)
+  • DEMAND BRAKE slows decay as armed bidders rise:
+      brake level 0 → ×1.0   (no demand)
+                  1 → ×0.75  (5+ armed)
+                  2 → ×0.55  (15+ armed)
+                  3 → ×0.4   (30+ armed)
+  • the brake is monotonic and stamped with an effective-from time`}
           </code>
         </div>
 

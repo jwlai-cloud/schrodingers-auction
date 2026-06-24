@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
       // Brake starts at 0 — real armed demand drives it up (votes route ratchets it).
       const burnLevel = 0;
       const burnEffective = null;
-      // Reveal acts early (8/20/35% of duration) so bidders can arm soon after entering.
-      const revealOffsets = [0.08, 0.2, 0.35].map((f) => Math.floor(item.durationS * f));
+      // Act 1 reveals immediately (votable on entry); acts 2/3 unlock at 15%/30%.
+      const revealOffsets = [0, 0.15, 0.3].map((f) => Math.floor(item.durationS * f));
       const pauseWindows = actsToPauseWindows(revealOffsets);
 
       // Clean prior-cycle intent + acts so the new race starts fresh with current offsets.

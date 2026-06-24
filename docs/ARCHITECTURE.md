@@ -6,8 +6,9 @@
 ## The three architectural theses
 
 1. **The price never touches the database.** Price is a deterministic function
-   `price(t) = f(start_price, decay_rate, burn_level, pause_windows, t)` of published
-   auction parameters. Clients compute it locally against a server clock offset.
+   `price(t) = f(start_price, duration, reserve, pause_windows, demand_brake, t)` of
+   published auction parameters. Clients compute it locally against a server clock
+   offset.
    The database stores *events* (votes, reactions, claims) and *facts* (auctions,
    ledger) — never ticks.
 
@@ -196,9 +197,10 @@ changes pixels, never outcomes.
 
 Vercel functions don't hold sockets, and we don't need them:
 
-- `GET /api/auctions/:id/state` returns ≤1 KB: decay params (incl. burn level +
-  pause windows), rollup counts by tier, spectator estimate, last-5s reaction
-  aggregates by region, status/winner.
+- `GET /api/auctions/:id/state` returns ≤1 KB: decay params (incl. demand-brake
+  level + pause windows), armed counts by tier (computed from `votes`), spectator
+  estimate, status/winner. It also lazily resolves the floor (lottery/withdraw)
+  when the price has reached the reserve unclaimed.
 - `Cache-Control: public, s-maxage=1, stale-while-revalidate=1` → the edge absorbs
   the polling fleet.
 - Claims/votes return fresh state in their response body, so actors see their own
