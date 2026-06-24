@@ -15,9 +15,9 @@ export async function GET(req: NextRequest) {
   const steps: { ddl: string; status: string }[] = [];
   async function run(ddl: string) {
     try {
+      // Single DDL auto-commits on its own connection (DSQL: one DDL per txn).
       await withConnection(async (client) => {
         await client.query(ddl);
-        await client.query("COMMIT");
       });
       steps.push({ ddl: ddl.slice(0, 80), status: "ok" });
     } catch (err) {

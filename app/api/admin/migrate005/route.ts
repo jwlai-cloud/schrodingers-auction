@@ -9,6 +9,8 @@ export async function GET(req: NextRequest) {
 
   const steps: { ddl: string; status: string; msg?: string }[] = [];
 
+  // Each DDL runs as its own auto-committed statement (DSQL: one DDL per
+  // transaction), so no explicit BEGIN/COMMIT is needed or correct here.
   async function run(ddl: string) {
     try {
       await query(ddl);
@@ -33,9 +35,7 @@ export async function GET(req: NextRequest) {
       expires_at TIMESTAMPTZ NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
-    await run(`COMMIT`);
     await run(`CREATE INDEX ASYNC IF NOT EXISTS sessions_user_ix ON sessions (user_id, expires_at)`);
-    await run(`COMMIT`);
 
     return NextResponse.json({ ok: true, steps });
   } catch (e) {

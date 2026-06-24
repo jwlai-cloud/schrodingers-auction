@@ -172,6 +172,8 @@ export async function POST(
           );
           const lossVotes = parseInt(vr.rows[0].count, 10);
           const lossTier = votesToTier(lossVotes);
+          // The main txn was committed above; open a fresh one for the audit insert.
+          await client.query("BEGIN");
           await client.query(
             `INSERT INTO claims (id, auction_id, user_id, server_price, tier, result, beaten_by_ms, armed_at_loss)
              VALUES ($1, $2, $3, $4, $5, 'lost', $6, 0)`,

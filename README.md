@@ -64,10 +64,12 @@ AUTH_SECRET=<random-32-char-string>
 pnpm dev            # starts on http://localhost:3000
 ```
 
-Seed the database (first run only):
+Seed the database (first run only) — admin-gated. Authenticate as an `ADMIN_EMAILS`
+user, or pass the `ADMIN_SECRET` you set in the environment via the `x-admin-secret`
+header (there is no default secret):
 
 ```
-POST /api/admin/seed?secret=schrodinger-debug
+curl -X POST https://<your-app>/api/admin/seed -H "x-admin-secret: $ADMIN_SECRET"
 ```
 
 ---

@@ -16,7 +16,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { withConnection } from "@/lib/db";
+import { withConnection, query } from "@/lib/db";
 import { computePrice, votesToTier, tierDelaySeconds, armedToBrakeLevel } from "@/lib/price";
 import { isAdmin } from "@/lib/adminAuth";
 import type { AuctionDecayParams, PauseWindow } from "@/lib/price";
@@ -87,6 +87,8 @@ export async function POST(req: NextRequest) {
 
   await withConnection(async (client) => {
     for (const bot of bots) {
+      // One transaction per bot: user + wallet + 3 votes, committed atomically.
+      await client.query("BEGIN");
       // Upsert user — DSQL: ON CONFLICT on PK is supported
       await client.query(
         `INSERT INTO users (id, email, display_name, region_code)
@@ -107,8 +109,6 @@ export async function POST(req: NextRequest) {
           `UPDATE wallets SET balance = 50000 WHERE user_id = $1`, [bot.id]
         );
       }
-      await client.query("COMMIT");
-
       // Cast 3 votes (pre-check dedup)
       for (const actNo of [1, 2, 3] as const) {
         const { rows: vRows } = await client.query(
@@ -128,20 +128,15 @@ export async function POST(req: NextRequest) {
   });
 
   // ── Demand brake: bots just armed, so ratchet the brake up (votes API is bypassed) ──
+  // Atomic ratchet — bump only when higher; no read-then-write race.
   const brake = armedToBrakeLevel(botCount);
   if (brake > 0) {
-    await withConnection(async (client) => {
-      const cur = await client.query<{ burn_level: number }>(
-        `SELECT burn_level FROM auctions WHERE id = $1`, [auctionId]
-      );
-      if ((cur.rows[0]?.burn_level ?? 0) < brake) {
-        await client.query(
-          `UPDATE auctions SET burn_level = $1, burn_effective = NOW() WHERE id = $2`,
-          [brake, auctionId]
-        );
-      }
-      await client.query("COMMIT");
-    });
+    await query(
+      `UPDATE auctions
+         SET burn_level = $1, burn_effective = NOW()
+       WHERE id = $2 AND COALESCE(burn_level, 0) < $1`,
+      [brake, auctionId]
+    );
   }
 
   // ── Arm-only mode: bots voted, brake applied; no claim. Human can now claim high. ──

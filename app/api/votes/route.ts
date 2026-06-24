@@ -135,16 +135,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     const totalArmed = a ? a.tier3 + a.tier2 + a.tier1 : 0;
     const brake = armedToBrakeLevel(totalArmed);
     if (brake > 0) {
-      const cur = await query<{ burn_level: number }>(
-        `SELECT burn_level FROM auctions WHERE id = $1`,
-        [auctionId]
+      // Atomic ratchet: bump only when the new level is higher. One statement,
+      // no read-then-write race between concurrent voters.
+      await query(
+        `UPDATE auctions
+           SET burn_level = $1, burn_effective = NOW()
+         WHERE id = $2 AND COALESCE(burn_level, 0) < $1`,
+        [brake, auctionId]
       );
-      if ((cur.rows[0]?.burn_level ?? 0) < brake) {
-        await query(
-          `UPDATE auctions SET burn_level = $1, burn_effective = NOW() WHERE id = $2`,
-          [brake, auctionId]
-        );
-      }
     }
   } catch (err) {
     console.error("[votes] brake ratchet failed:", err);

@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
 
   await withConnection(async (client) => {
     // Ensure the demo seller + wallet exist.
+    await client.query("BEGIN");
     await client.query(
       `INSERT INTO users (id, email, display_name, region_code)
        VALUES ($1, 'demo@schrodinger.auction', 'Demo Seller', 'AU-NSW')
@@ -49,12 +50,12 @@ export async function POST(req: NextRequest) {
       const revealOffsets = [0, 0.15, 0.3].map((f) => Math.floor(item.durationS * f));
       const pauseWindows = actsToPauseWindows(revealOffsets);
 
-      // Clean prior-cycle intent + acts so the new race starts fresh with current offsets.
+      // One transaction per item: clear prior-cycle data, relist, reinsert acts.
+      await client.query("BEGIN");
       await client.query(`DELETE FROM votes WHERE auction_id = $1`, [item.id]);
       await client.query(`DELETE FROM lottery_entries WHERE auction_id = $1`, [item.id]);
       await client.query(`DELETE FROM claims WHERE auction_id = $1`, [item.id]);
       await client.query(`DELETE FROM acts WHERE auction_id = $1`, [item.id]);
-      await client.query("COMMIT");
 
       await client.query(
         `INSERT INTO auctions (

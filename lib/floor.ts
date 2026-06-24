@@ -11,12 +11,12 @@
  * callers resolve to exactly one outcome — the same OCC guarantee as a claim.
  */
 import { randomUUID } from "crypto";
-import { withConnection } from "@/lib/db";
+import { withConnection, query } from "@/lib/db";
 import { computePrice, type AuctionDecayParams, type PauseWindow } from "@/lib/price";
 
 const PLATFORM_USER_ID = "00000000-0000-0000-0000-000000000000";
 
-interface FloorRow {
+interface FloorRow extends Record<string, unknown> {
   id: string;
   status: string;
   winner_user_id: string | null;
@@ -35,8 +35,35 @@ interface FloorRow {
 
 export type FloorOutcome = "unsold" | "lottery" | null;
 
+function toDecay(a: FloorRow): AuctionDecayParams {
+  let pauseWindows: PauseWindow[] = [];
+  try { pauseWindows = JSON.parse(a.pause_windows ?? "[]"); } catch { /**/ }
+  return {
+    startsAtMs: new Date(a.starts_at).getTime(),
+    durationS: a.duration_s,
+    startPrice: Number(a.start_price),
+    reservePrice: Number(a.reserve_price),
+    curve: "linear",
+    pauseWindows,
+    burnLevel: (a.burn_level ?? 0) as 0 | 1 | 2 | 3,
+    burnEffectiveAtMs: a.burn_effective ? new Date(a.burn_effective).getTime() : null,
+  };
+}
+
+const FLOOR_COLS = `id, status, winner_user_id, seller_user_id, start_price, reserve_price,
+        base_fee_bps, spread_fee_bps, starts_at, duration_s, pause_windows,
+        burn_level, burn_effective, floor_action`;
+
 export async function resolveFloorIfNeeded(auctionId: string): Promise<FloorOutcome> {
   try {
+    // Cheap, txn-free pre-check — the common case (not at floor) returns after one
+    // pooled read, so the state poll doesn't open a transaction every second.
+    const pre = await query<FloorRow>(`SELECT ${FLOOR_COLS} FROM auctions WHERE id = $1`, [auctionId]);
+    const p = pre.rows[0];
+    if (!p || p.status !== "live" || p.winner_user_id !== null) return null;
+    if (!computePrice(toDecay(p), Date.now()).atFloor) return null;
+
+    // At floor — run the guarded resolution in a transaction.
     return await withConnection(async (client) => {
       await client.query("BEGIN");
 
