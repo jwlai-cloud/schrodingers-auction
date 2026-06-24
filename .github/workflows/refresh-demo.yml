@@ -1,0 +1,31 @@
+name: Refresh demo auctions
+
+# Keeps the live demo lobby fresh: every 20 min, re-list the catalogue items
+# with staggered start times so prices always sit mid-curve. This only TRIGGERS
+# the work over HTTPS — the Vercel app holds the AWS DSQL credentials and does
+# the database writes. The Action needs only ADMIN_SECRET.
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call refresh-demo endpoint
+        env:
+          ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
+          APP_URL: https://schrodingers-auction.vercel.app
+        run: |
+          if [ -z "$ADMIN_SECRET" ]; then
+            echo "ADMIN_SECRET secret is not set in the repo. Aborting."
+            exit 1
+          fi
+          code=$(curl -sS -o /tmp/refresh.json -w "%{http_code}" -X POST \
+            -H "x-admin-secret: $ADMIN_SECRET" \
+            "$APP_URL/api/admin/refresh-demo")
+          echo "HTTP $code"
+          cat /tmp/refresh.json || true
+          echo
+          test "$code" = "200"

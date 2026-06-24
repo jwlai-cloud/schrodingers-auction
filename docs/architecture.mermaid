@@ -9,13 +9,13 @@ flowchart TB
         EDGE["Edge cache — auction state snapshot
         (Cache-Control: s-maxage=1)"]
         AGG["GET /api/auctions/:id/state
-        price params · armed counts · reactions"]
-        VOTE["POST /api/votes — insert-only"]
+        price params · armed counts (from votes) · lazy floor resolution"]
+        VOTE["POST /api/votes — insert-only + demand-brake ratchet"]
         REACT["POST /api/reactions — insert-only"]
         CLAIM["POST /api/claims
         guarded UPDATE + atomic ledger settlement"]
-        CRON["Vercel Cron 1–5s
-        rollup writer · floor-lottery draw"]
+        REFRESH["GitHub Actions cron (20 min)
+        → POST /api/admin/refresh-demo (HTTPS)"]
     end
 
     subgraph DSQL["Amazon Aurora DSQL — active-active multi-region, strongly consistent"]
@@ -41,4 +41,4 @@ flowchart TB
     CLAIM --> RA
     CLAIM -.->|"far-region claims hit nearest endpoint —
     exactly one commit wins"| RB
-    CRON --> RA
+    REFRESH --> RA

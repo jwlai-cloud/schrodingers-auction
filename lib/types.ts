@@ -15,9 +15,13 @@ export type AuctionStatus =
   | "claimed"
   | "lottery"
   | "settled"
-  | "expired";
+  | "expired"
+  | "unsold"; // hit floor with no claim and seller chose withdraw
 
 export type WonVia = "claim" | "lottery";
+
+/** What happens when the price reaches the floor with no claim. */
+export type FloorAction = "lottery" | "withdraw";
 
 export type ClaimResult = "won" | "lost";
 
@@ -178,10 +182,16 @@ export interface ClaimResponse {
 export interface AuctionSummary {
   id: string;
   title: string;
+  description?: string;
   imageUrl: string | null;
+  category: string;
   status: AuctionStatus;
   startPrice: number;
   reservePrice: number;
+  /** Seller's user id — used to gate the relist action to the owner. */
+  sellerUserId?: string;
+  /** What happens at the floor: forced lottery sale or withdraw unsold. */
+  floorAction?: FloorAction;
   /** Simplified decay params sufficient for the lobby price ticker. */
   decayParams: AuctionDecayParams;
   armed: ArmedCounts;

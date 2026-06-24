@@ -3,6 +3,13 @@
 Deadline: **June 29, 2026 @ 5:00 pm PDT** (≈ June 30, 8:00 am AWST).
 Credits request form due **June 26, 12 pm PT** — do this on Day 1, supplies limited.
 
+> **Status (this is the original plan).** Most of the core shipped and is live —
+> see the checklist in `README.md`. Two mechanics evolved during the build:
+> *demand burn* became a **demand brake** (more armed → *slower* decay, not faster),
+> and the floor is now the **lister's choice** per item (floor lottery **or**
+> withdraw-unsold). Still ahead: image-pool + AI (Gemini) listing descriptions,
+> and the submission video.
+
 ## Principles
 
 - Claim transaction first; pixels second. The fairness demo is the submission.

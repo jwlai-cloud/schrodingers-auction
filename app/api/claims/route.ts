@@ -21,10 +21,11 @@
  * Idempotency key makes double-clicks safe.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server"; // NextRequest not needed — using getSession() for auth
 import { randomUUID } from "crypto";
 import { withConnection } from "@/lib/db";
 import { computePrice, votesToTier, tierDelaySeconds } from "@/lib/price";
+import { getSession } from "@/lib/auth";
 import type { ClaimRequest, ClaimResponse, AuctionStateResponse } from "@/lib/types";
 import type { AuctionDecayParams, PauseWindow } from "@/lib/price";
 
@@ -59,12 +60,13 @@ interface ExistingClaimRow {
 }
 
 export async function POST(
-  req: NextRequest
+  req: Request
 ): Promise<NextResponse<ClaimResponse | { error: string }>> {
-  const userId = req.headers.get("x-user-id");
-  if (!userId) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   }
+  const userId = session.id;
 
   let body: unknown;
   try {
@@ -73,14 +75,15 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { auctionId, idempotencyKey } = body as ClaimRequest;
+  const { auctionId, idempotencyKey: rawKey } = body as ClaimRequest;
 
-  if (!auctionId || !idempotencyKey) {
-    return NextResponse.json(
-      { error: "auctionId and idempotencyKey are required" },
-      { status: 400 }
-    );
+  if (!auctionId) {
+    return NextResponse.json({ error: "auctionId is required" }, { status: 400 });
   }
+
+  // claims.id is a UUID primary key — validate or generate a fresh one.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const idempotencyKey = rawKey && UUID_RE.test(rawKey) ? rawKey : randomUUID();
 
   const now = Date.now();
 
@@ -129,13 +132,65 @@ export async function POST(
 
       const a = auctionResult.rows[0];
 
-      if (a.status !== "live") {
+      if (a.status !== "live" && a.winner_user_id === null) {
         await client.query("ROLLBACK");
         throw Object.assign(new Error("Auction is not live"), { code: 409 });
       }
+
+      // Already claimed — look up real winner and compute real beatenByMs
       if (a.winner_user_id !== null) {
-        await client.query("ROLLBACK");
-        throw Object.assign(new Error("Auction already claimed"), { code: 409 });
+        await client.query("COMMIT");
+        const winnerRow = await client.query<{ display_name: string; region_code: string | null }>(
+          `SELECT display_name, region_code FROM users WHERE id = $1`,
+          [a.winner_user_id]
+        );
+        const wu = winnerRow.rows[0];
+        // claimed_at is stored in the row; delta = now - claimed_at
+        const claimedAtMs = a.starts_at
+          ? now - new Date(a.starts_at).getTime() // fallback
+          : now;
+        // Fetch claimed_at from the auction
+        const caRow = await client.query<{ claimed_at: Date; winning_price: string }>(
+          `SELECT claimed_at, winning_price FROM auctions WHERE id = $1`, [auctionId]
+        );
+        const realClaimedAtMs = caRow.rows[0]?.claimed_at
+          ? new Date(caRow.rows[0].claimed_at).getTime()
+          : claimedAtMs;
+        const realBeatenByMs = Math.max(1, now - realClaimedAtMs);
+        const winningPrice = Number(caRow.rows[0]?.winning_price ?? a.start_price);
+
+        // Write a loss audit row so the caller has a receipt
+        const UUID_RE2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const lossKey = UUID_RE2.test(idempotencyKey) ? idempotencyKey : randomUUID();
+        const existCheck = await client.query(
+          `SELECT id FROM claims WHERE id = $1`, [lossKey]
+        );
+        if (existCheck.rows.length === 0) {
+          const vr = await client.query<{ count: string }>(
+            `SELECT COUNT(*) as count FROM votes WHERE auction_id = $1 AND user_id = $2`,
+            [auctionId, userId]
+          );
+          const lossVotes = parseInt(vr.rows[0].count, 10);
+          const lossTier = votesToTier(lossVotes);
+          // The main txn was committed above; open a fresh one for the audit insert.
+          await client.query("BEGIN");
+          await client.query(
+            `INSERT INTO claims (id, auction_id, user_id, server_price, tier, result, beaten_by_ms, armed_at_loss)
+             VALUES ($1, $2, $3, $4, $5, 'lost', $6, 0)`,
+            [lossKey, auctionId, userId, winningPrice, lossTier, realBeatenByMs]
+          );
+          await client.query("COMMIT");
+        }
+
+        return {
+          _alreadyClaimed: true,
+          winnerName: wu?.display_name ?? "another bidder",
+          regionCode: wu?.region_code ?? null,
+          winningPrice,
+          beatenByMs: realBeatenByMs,
+          auctionId,
+          serverPrice: winningPrice,
+        };
       }
 
       // ── Server-authoritative price ───────────────────────────────────────
@@ -181,7 +236,7 @@ export async function POST(
         throw Object.assign(new Error(`Tier delay: wait ${(delayS - auctionElapsedS).toFixed(1)}s`), { code: 425 });
       }
 
-      // ── Wallet balance check ──────────────────────────────────────────────
+      // ── Wallet balance check ─���────────────────────────────────────────────
       const walletResult = await client.query<{ balance: string }>(
         `SELECT balance FROM wallets WHERE user_id = $1`,
         [userId]
@@ -217,6 +272,30 @@ export async function POST(
 
       const won = updateResult.rowCount === 1;
 
+      // ── Compute real beatenByMs on loss ──────────────────────────────────
+      let beatenByMs: number | null = null;
+      let realWinnerName = "another bidder";
+      let realWinnerRegion: string | null = null;
+      if (!won) {
+        // Fetch the winner's claimed_at and display_name atomically
+        const lossInfo = await client.query<{
+          claimed_at: Date; winner_user_id: string; winning_price: string;
+        }>(
+          `SELECT claimed_at, winner_user_id, winning_price FROM auctions WHERE id = $1`,
+          [auctionId]
+        );
+        if (lossInfo.rows[0]?.claimed_at) {
+          beatenByMs = Math.max(1, now - new Date(lossInfo.rows[0].claimed_at).getTime());
+          // Fetch winner display name
+          const wNameRow = await client.query<{ display_name: string; region_code: string | null }>(
+            `SELECT display_name, region_code FROM users WHERE id = $1`,
+            [lossInfo.rows[0].winner_user_id]
+          );
+          realWinnerName = wNameRow.rows[0]?.display_name ?? "another bidder";
+          realWinnerRegion = wNameRow.rows[0]?.region_code ?? null;
+        }
+      }
+
       // ── Write audit row ───────────────────────────────────────────────────
       await client.query(
         `INSERT INTO claims (id, auction_id, user_id, server_price, tier, result, beaten_by_ms, armed_at_loss)
@@ -228,7 +307,7 @@ export async function POST(
           serverPrice,
           tier,
           won ? "won" : "lost",
-          won ? null : 1,         // beaten_by_ms placeholder (real value needs clock comparison)
+          won ? null : beatenByMs,
           won ? null : totalArmed,
         ]
       );
@@ -255,11 +334,10 @@ export async function POST(
           [sellerProceeds, a.seller_user_id]
         );
 
-        // Credit platform (fees)
+        // Credit platform (fees) — UPDATE only; platform wallet is pre-created by seed
         await client.query(
-          `INSERT INTO wallets (user_id, balance, updated_at) VALUES ($1, $2, NOW())
-           ON CONFLICT (user_id) DO UPDATE SET balance = wallets.balance + $2, updated_at = NOW()`,
-          [PLATFORM_USER_ID, totalFee]
+          `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE user_id = $2`,
+          [totalFee, PLATFORM_USER_ID]
         );
 
         // Ledger rows (buyer debit, seller credit, platform fee credit)
@@ -280,48 +358,73 @@ export async function POST(
 
       await client.query("COMMIT");
 
-      // ── Fetch winner display name ─────────────────────────────────────────
-      const winnerUserResult = await client.query<{ display_name: string; region_code: string | null }>(
-        `SELECT display_name, region_code FROM users WHERE id = $1`,
-        [userId]
-      );
-      const wu = winnerUserResult.rows[0];
+      // ── Fetch the WINNER's display name (caller on win, real winner on loss) ──
+      const winnerUserId = won ? userId : null; // on loss, name already in realWinnerName
+      let callerDisplayName = "unknown";
+      let callerRegion: string | null = null;
+      if (won) {
+        const wu = await client.query<{ display_name: string; region_code: string | null }>(
+          `SELECT display_name, region_code FROM users WHERE id = $1`, [userId]
+        );
+        callerDisplayName = wu.rows[0]?.display_name ?? "unknown";
+        callerRegion = wu.rows[0]?.region_code ?? null;
+      }
 
       return {
         won,
         serverPrice,
         tier,
         totalArmed,
-        displayName: wu?.display_name ?? "unknown",
-        regionCode: wu?.region_code ?? null,
+        beatenByMs,
+        // On win: show the caller's name. On loss: show the real winner's name.
+        displayName: won ? callerDisplayName : realWinnerName,
+        regionCode: won ? callerRegion : realWinnerRegion,
         claimedAtMs: now,
         decayParams,
         auctionId,
+        winnerUserId,
       };
     });
 
     // ── Build ClaimResponse ─────────────────────────────────────────────────
-    const { won, serverPrice, tier, totalArmed, displayName, regionCode, claimedAtMs, decayParams, auctionId: aId } = result as {
-      won: boolean;
-      serverPrice: number;
-      tier: number;
-      totalArmed: number;
-      displayName: string;
-      regionCode: string | null;
-      claimedAtMs: number;
-      decayParams: AuctionDecayParams;
-      auctionId: string;
-      claimId?: string;
-      result?: string;
-      winner?: ClaimResponse["winner"];
-      loserReceipt?: ClaimResponse["loserReceipt"];
-      state?: AuctionStateResponse;
+    type ResultShape = {
+      won: boolean; serverPrice: number; tier: number; totalArmed: number;
+      beatenByMs: number | null; displayName: string; regionCode: string | null;
+      claimedAtMs: number; decayParams: AuctionDecayParams; auctionId: string;
+      _alreadyClaimed?: boolean; winnerName?: string; winningPrice?: number;
+      beatenByMs2?: number; state?: unknown;
     };
 
+    const r = result as ResultShape;
+
     // Handle idempotency short-circuit (state is null sentinel)
-    if ("state" in (result as object) && (result as unknown as { state: unknown }).state === null) {
+    if ("state" in (r as object) && (r as unknown as { state: unknown }).state === null) {
       return NextResponse.json(result as unknown as ClaimResponse, { status: 200 });
     }
+
+    // Handle already-claimed path (bot won before human arrived)
+    if (r._alreadyClaimed) {
+      const lossResponse: ClaimResponse = {
+        claimId: idempotencyKey,
+        result: "lost",
+        serverPrice: r.serverPrice,
+        winner: {
+          displayName: (r as unknown as { winnerName: string }).winnerName ?? "another bidder",
+          regionCode: r.regionCode,
+          winningPrice: (r as unknown as { winningPrice: number }).winningPrice ?? r.serverPrice,
+          wonVia: "claim",
+          claimedAtMs: now,
+        },
+        loserReceipt: {
+          beatenByMs: (r as unknown as { beatenByMs: number }).beatenByMs ?? 0,
+          armedCountAtLoss: 0,
+        },
+        state: null as unknown as AuctionStateResponse,
+      };
+      return NextResponse.json(lossResponse, { status: 200 });
+    }
+
+    const { won, serverPrice, tier, totalArmed, beatenByMs, displayName, regionCode, claimedAtMs, decayParams, auctionId: aId } = r;
 
     const winner: ClaimResponse["winner"] = {
       displayName,
@@ -350,11 +453,11 @@ export async function POST(
       result: won ? "won" : "lost",
       serverPrice,
       winner,
-      loserReceipt: !won ? { beatenByMs: 1, armedCountAtLoss: totalArmed } : undefined,
+      loserReceipt: !won ? { beatenByMs: beatenByMs ?? 0, armedCountAtLoss: totalArmed } : undefined,
       state,
     };
 
-    return NextResponse.json(response, { status: won ? 200 : 200 });
+    return NextResponse.json(response, { status: 200 });
 
   } catch (err: unknown) {
     const e = err as Error & { code?: number };

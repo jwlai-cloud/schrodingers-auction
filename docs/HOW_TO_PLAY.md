@@ -67,9 +67,11 @@ The auction screen shows you, live and globally consistent:
 - **Spectator count** — `2,341 watching · 47 armed`. A big gap says *wait*;
   a closing gap says *move*.
 - **World heatmap** — where votes and reactions are coming from, pulsing live.
-- **Demand burn** — every armed-bidder milestone (25 / 50 / 100) slightly
-  **accelerates the price decay**. Demand makes the clock scarier. The burn level
-  is shown next to the price.
+- **Demand brake** — as armed bidders cross milestones (5 / 15 / 30), the price
+  decay **slows down** (×0.75 → ×0.55 → ×0.4). Visible demand props the price up,
+  so a hot item holds high instead of fire-selling. The HOLD level is shown next
+  to the price. (Voting is deliberate: you can only vote for an act once it's been
+  revealed, and there's a short cooldown between votes.)
 
 ### Step 3 — Claim (or gamble on the floor)
 
@@ -77,10 +79,12 @@ The auction screen shows you, live and globally consistent:
   the planet, wins. Your tier delay (if any) is enforced server-side. If someone
   beats you by a millisecond, you get the **loser receipt**:
   *"Claimed from under 47 armed bidders — you were 0.4s away."*
-- **Floor lottery (opt-in)** — fully-armed bidders may toggle *"If nobody claims,
-  I'll buy at floor price."* If the price reaches the reserve unclaimed, one opted-in
-  bidder is drawn at random and buys at the floor. The seller always sells; patient
-  bidders get a second game.
+- **At the floor — the lister's choice.** When listing, the seller picks what happens
+  if the price reaches the reserve unclaimed:
+  - **Floor lottery** — one fully-armed bidder is drawn at random and buys at the
+    floor. The seller always sells; patient armed bidders get a second game.
+  - **Withdraw** — the item is taken down unsold (reserve not met) and can be
+    relisted later. The seller is never forced to sell below their floor.
 
 ### Wallet
 

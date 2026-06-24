@@ -1,6 +1,5 @@
-import type { Config } from "tailwindcss";
-
-const config: Config = {
+/** @type {import('tailwindcss').Config} */
+module.exports = {
   darkMode: ["class"],
   content: [
     "./pages/**/*.{ts,tsx}",
@@ -53,7 +52,6 @@ const config: Config = {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
-        // Brand tokens
         amber: {
           DEFAULT: "hsl(var(--amber))",
           foreground: "hsl(var(--amber-foreground))",
@@ -93,10 +91,7 @@ const config: Config = {
         "fade-in": "fade-in 0.4s ease-out",
         shimmer: "shimmer 2s linear infinite",
       },
-      tabularNums: { fontVariantNumeric: "tabular-nums" },
     },
   },
   plugins: [],
 };
-
-export default config;
