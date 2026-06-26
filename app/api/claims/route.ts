@@ -29,6 +29,9 @@ import { getSession } from "@/lib/auth";
 import type { ClaimRequest, ClaimResponse, AuctionStateResponse } from "@/lib/types";
 import type { AuctionDecayParams, PauseWindow } from "@/lib/price";
 
+// Allow headroom for the server-side tier delay (up to 5s) plus settlement.
+export const maxDuration = 30;
+
 // Platform pseudo-user wallet that receives listing fees + commissions.
 const PLATFORM_USER_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -208,8 +211,8 @@ export async function POST(
         burnEffectiveAtMs: a.burn_effective ? new Date(a.burn_effective).getTime() : null,
       };
 
-      const priceResult = computePrice(decayParams, now);
-      const serverPrice = priceResult.price;
+      let priceResult = computePrice(decayParams, now);
+      let serverPrice = priceResult.price;
 
       if (priceResult.atFloor) {
         await client.query("ROLLBACK");
@@ -229,11 +232,22 @@ export async function POST(
         throw Object.assign(new Error("No votes — cannot claim"), { code: 403 });
       }
 
+      // Enforce the tier delay FOR REAL: tier 1/2 wait server-side before their
+      // claim is accepted, so fully-armed (tier 3, delay 0) reliably wins a race.
+      // The guarded UPDATE below re-checks winner IS NULL, so a faster claim landing
+      // during the wait makes this one lose correctly.
       const delayS = tierDelaySeconds(tier);
-      const auctionElapsedS = (now - new Date(a.starts_at).getTime()) / 1000;
-      if (auctionElapsedS < delayS) {
-        await client.query("ROLLBACK");
-        throw Object.assign(new Error(`Tier delay: wait ${(delayS - auctionElapsedS).toFixed(1)}s`), { code: 425 });
+      let settleAtMs = now;
+      if (delayS > 0) {
+        await new Promise((r) => setTimeout(r, delayS * 1000));
+        settleAtMs = Date.now();
+        // Price kept falling during the wait — recompute and re-check the floor.
+        priceResult = computePrice(decayParams, settleAtMs);
+        serverPrice = priceResult.price;
+        if (priceResult.atFloor) {
+          await client.query("ROLLBACK");
+          throw Object.assign(new Error("Price reached the floor during your delay — lottery window only"), { code: 409 });
+        }
       }
 
       // ── Wallet balance check ─���────────────────────────────────────────────
@@ -256,7 +270,7 @@ export async function POST(
         : 0;
 
       // ── Guarded UPDATE — the actual race ─────────────────────────────────
-      const claimedAt = new Date(now).toISOString();
+      const claimedAt = new Date(settleAtMs).toISOString();
       const updateResult = await client.query(
         `UPDATE auctions
          SET winner_user_id = $1,
