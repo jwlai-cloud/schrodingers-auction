@@ -107,7 +107,8 @@ export async function POST(req: NextRequest) {
       const lotteryRows: string[] = [], lotteryParams: unknown[] = [item.id]; // $1 = auction_id
       let up = 0, wp = 0, vp = 1, lp = 1;
       for (let k = 0; k < armedN; k++) {
-        const bid = `b07b00${itemIdx}0-0000-4000-8000-${String(k).padStart(12, "0")}`;
+        // All-hex, fixed-width tail → always a valid UUID regardless of item count.
+        const bid = `b07b0000-0000-4000-8000-${String(itemIdx).padStart(3, "0")}${String(k).padStart(9, "0")}`;
         userRows.push(`($${++up},$${++up},$${++up},'BOT')`);
         userParams.push(bid, `bot${itemIdx}_${k}@bots.sca`, `bidder_${k}`);
         walletRows.push(`($${++wp},50000)`);
@@ -123,18 +124,23 @@ export async function POST(req: NextRequest) {
           lotteryParams.push(bid);
         }
       }
-      await client.query(
-        `INSERT INTO users (id, email, display_name, region_code) VALUES ${userRows.join(",")} ON CONFLICT (id) DO NOTHING`,
-        userParams
-      );
-      await client.query(
-        `INSERT INTO wallets (user_id, balance) VALUES ${walletRows.join(",")} ON CONFLICT (user_id) DO NOTHING`,
-        walletParams
-      );
-      await client.query(
-        `INSERT INTO votes (id, auction_id, user_id, act_no) VALUES ${voteRows.join(",")}`,
-        voteParams
-      );
+      // Guard: never emit `VALUES ` with no rows (would be a SQL syntax error).
+      if (userRows.length > 0) {
+        await client.query(
+          `INSERT INTO users (id, email, display_name, region_code) VALUES ${userRows.join(",")} ON CONFLICT (id) DO NOTHING`,
+          userParams
+        );
+        await client.query(
+          `INSERT INTO wallets (user_id, balance) VALUES ${walletRows.join(",")} ON CONFLICT (user_id) DO NOTHING`,
+          walletParams
+        );
+      }
+      if (voteRows.length > 0) {
+        await client.query(
+          `INSERT INTO votes (id, auction_id, user_id, act_no) VALUES ${voteRows.join(",")}`,
+          voteParams
+        );
+      }
       if (lotteryRows.length > 0) {
         await client.query(
           `INSERT INTO lottery_entries (id, auction_id, user_id) VALUES ${lotteryRows.join(",")}`,

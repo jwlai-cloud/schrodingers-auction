@@ -198,7 +198,8 @@ export default async function AuctionPage({ params }: PageProps) {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <AuctionRoom auction={auction} serverTimeMs={auction.serverTimeMs} initialVotes={initialVotes} />
+      {/* key forces a remount per auction so prop-seeded state (votes, armed) resets. */}
+      <AuctionRoom key={auction.id} auction={auction} serverTimeMs={auction.serverTimeMs} initialVotes={initialVotes} />
     </div>
   );
 }
