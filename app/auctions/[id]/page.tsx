@@ -13,6 +13,8 @@ import type { AuctionSummary } from "@/lib/types";
 import { AuctionRoom } from "@/components/AuctionRoom";
 import { Navbar } from "@/components/Navbar";
 import { fetchAuctionWithActs } from "@/lib/auctions";
+import { getSession } from "@/lib/auth";
+import { query } from "@/lib/db";
 
 export interface AuctionWithActs extends AuctionSummary {
   acts: { actNo: 1 | 2 | 3; headline: string; detail: string }[];
@@ -178,10 +180,25 @@ export default async function AuctionPage({ params }: PageProps) {
   const auction = (await fetchAuctionWithActs(id, now)) ?? buildMockAuction(id);
   if (!auction) notFound();
 
+  // Restore the signed-in user's vote count so arming persists across re-entry.
+  let initialVotes = 0;
+  const session = await getSession().catch(() => null);
+  if (session) {
+    try {
+      const { rows } = await query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM votes WHERE auction_id = $1 AND user_id = $2`,
+        [id, session.id]
+      );
+      initialVotes = Math.min(3, parseInt(rows[0]?.count ?? "0", 10));
+    } catch {
+      /* ignore — default to 0 */
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <AuctionRoom auction={auction} serverTimeMs={auction.serverTimeMs} />
+      <AuctionRoom auction={auction} serverTimeMs={auction.serverTimeMs} initialVotes={initialVotes} />
     </div>
   );
 }
