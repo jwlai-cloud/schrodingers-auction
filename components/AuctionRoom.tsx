@@ -16,6 +16,8 @@ import type { AuctionWithActs } from "@/app/auctions/[id]/page";
 interface AuctionRoomProps {
   auction: AuctionWithActs;
   serverTimeMs: number;
+  /** The signed-in user's existing vote count (so arming survives leaving + returning). */
+  initialVotes?: number;
 }
 
 type ClaimState = "idle" | "countdown" | "submitting" | "won" | "lost";
@@ -37,7 +39,7 @@ function armedHeat(total: number): { line: string; tone: "hot" | "warm" | "cool"
   return { line: `Be the first to arm — vote on the seller's reveals to earn claim rights.`, tone: "cool" };
 }
 
-export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
+export function AuctionRoom({ auction, serverTimeMs, initialVotes = 0 }: AuctionRoomProps) {
   // Capture the server-clock offset ONCE at mount. Computing it inline on every
   // render would re-pin the effective clock to serverTimeMs each 500ms re-render,
   // freezing the price (Date.now() + offset collapses back to serverTimeMs).
@@ -90,7 +92,7 @@ export function AuctionRoom({ auction, serverTimeMs }: AuctionRoomProps) {
   })();
 
   // ── Votes — real API; reconcile with the server's true count ──────────────
-  const [votes, setVotes] = useState(0);
+  const [votes, setVotes] = useState(initialVotes);
   const [voteMsg, setVoteMsg] = useState<string | null>(null);
   const tier = votesToTier(votes);
 
