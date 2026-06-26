@@ -33,7 +33,7 @@ Deadline: June 29, 2026, 5:00 pm PDT.
 | 0:00–0:20 | Hook | Price ticking down over an item; armed counter at 47 | "Dutch auctions are a century old — and informationally dead. Nothing happens until the one moment something happens. We put the room back in." |
 | 0:20–0:50 | Problem | Listing form, no camera required | "Live shopping proved drops sell — if you'll perform on camera for hours. Schrödinger's Auction is the drop platform for sellers with no audience and no camera." |
 | 0:50–1:30 | Gameplay | Act reveal → spotlight pause → vote → tier badge → emoji bursts → demand-HOLD badge (price slows as demand rises) | "Bidders earn claim rights with attention, not money. Everyone sees the same price and the same armed count — everywhere on Earth." |
-| 1:30–2:10 | The money shot | Split screen: two browsers, simultaneous CLAIM. One wins; the other gets '0.4 seconds.' | "Two continents, one millisecond apart. Aurora DSQL's multi-region strong consistency commits exactly one claim — the serialization conflict is the game's referee." |
+| 1:30–2:10 | The money shot | Trigger the admin bot race (or two browsers): simultaneous claims. One wins; the loser screen names the real winner + the real millisecond gap ("342ms. fast_fingers was faster."). | "Two continents, one millisecond apart. Aurora DSQL's multi-region strong consistency commits exactly one claim — the serialization conflict is the game's referee." |
 | 2:10–2:35 | Business | Settlement receipt: sale price, 5% base, 10% spread bonus, seller net | "Visible demand makes buyers claim earlier and higher. Sellers earn more; our spread fee grows with theirs. Engagement is the revenue model." |
 | 2:35–3:00 | Architecture | Architecture diagram; /admin DB browser; price formula | "Price never touches the database. One guarded UPDATE decides everything. Schrödinger's Auction — until it's claimed, it's every price at once." |
 
@@ -48,7 +48,7 @@ Deadline: June 29, 2026, 5:00 pm PDT.
 - [x] Landing page → live auction in ≤2 clicks
 - [x] Fresh account: signup → 50,000 coins in < 30 seconds
 - [x] Vote 3 times → fully armed → CLAIM NOW button turns amber
-- [x] Claim flow: win screen ("You claimed it.") or loss screen ("0.4 seconds.")
+- [x] Claim flow: win screen ("You claimed it.") or loss screen (real winner name + real ms gap)
 - [x] Sell flow: fill form → submit → listing written to Aurora DSQL
 - [x] DB browser at /admin proves data is real Aurora DSQL rows
 - [x] Demo script at /demo — 8-step walkthrough matches live UI exactly
