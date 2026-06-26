@@ -23,7 +23,7 @@
 
 import { NextResponse } from "next/server"; // NextRequest not needed — using getSession() for auth
 import { randomUUID } from "crypto";
-import { withConnection } from "@/lib/db";
+import { withConnection, query } from "@/lib/db";
 import { computePrice, votesToTier, tierDelaySeconds } from "@/lib/price";
 import { getSession } from "@/lib/auth";
 import type { ClaimRequest, ClaimResponse, AuctionStateResponse } from "@/lib/types";
@@ -88,6 +88,24 @@ export async function POST(
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const idempotencyKey = rawKey && UUID_RE.test(rawKey) ? rawKey : randomUUID();
 
+  // Enforce the tier delay BEFORE opening a transaction. Holding a pooled
+  // connection (max 20) or a long-open DSQL txn across a 5s sleep would starve
+  // the pool and inflate OCC aborts. Quick auto-committed read for the tier,
+  // sleep outside any txn, then transact. tier 1 = 5s, tier 2 = 2s, tier 3 = 0.
+  const preVotes = await query<{ count: string }>(
+    `SELECT COUNT(*) as count FROM votes WHERE auction_id = $1 AND user_id = $2`,
+    [auctionId, userId]
+  );
+  const preTier = votesToTier(parseInt(preVotes.rows[0]?.count ?? "0", 10));
+  if (preTier === 0) {
+    return NextResponse.json({ error: "No votes — cannot claim" }, { status: 403 });
+  }
+  const preDelayS = tierDelaySeconds(preTier);
+  if (preDelayS > 0) {
+    await new Promise((r) => setTimeout(r, preDelayS * 1000));
+  }
+
+  // Timestamp AFTER the delay — the claim is evaluated at the moment it lands.
   const now = Date.now();
 
   try {
@@ -211,8 +229,8 @@ export async function POST(
         burnEffectiveAtMs: a.burn_effective ? new Date(a.burn_effective).getTime() : null,
       };
 
-      let priceResult = computePrice(decayParams, now);
-      let serverPrice = priceResult.price;
+      const priceResult = computePrice(decayParams, now);
+      const serverPrice = priceResult.price;
 
       if (priceResult.atFloor) {
         await client.query("ROLLBACK");
@@ -231,26 +249,9 @@ export async function POST(
         await client.query("ROLLBACK");
         throw Object.assign(new Error("No votes — cannot claim"), { code: 403 });
       }
+      // (Tier delay already enforced before this transaction was opened.)
 
-      // Enforce the tier delay FOR REAL: tier 1/2 wait server-side before their
-      // claim is accepted, so fully-armed (tier 3, delay 0) reliably wins a race.
-      // The guarded UPDATE below re-checks winner IS NULL, so a faster claim landing
-      // during the wait makes this one lose correctly.
-      const delayS = tierDelaySeconds(tier);
-      let settleAtMs = now;
-      if (delayS > 0) {
-        await new Promise((r) => setTimeout(r, delayS * 1000));
-        settleAtMs = Date.now();
-        // Price kept falling during the wait — recompute and re-check the floor.
-        priceResult = computePrice(decayParams, settleAtMs);
-        serverPrice = priceResult.price;
-        if (priceResult.atFloor) {
-          await client.query("ROLLBACK");
-          throw Object.assign(new Error("Price reached the floor during your delay — lottery window only"), { code: 409 });
-        }
-      }
-
-      // ── Wallet balance check ─���────────────────────────────────────────────
+      // ── Wallet balance check ──────────────────────────────────────────────
       const walletResult = await client.query<{ balance: string }>(
         `SELECT balance FROM wallets WHERE user_id = $1`,
         [userId]
@@ -270,7 +271,7 @@ export async function POST(
         : 0;
 
       // ── Guarded UPDATE — the actual race ─────────────────────────────────
-      const claimedAt = new Date(settleAtMs).toISOString();
+      const claimedAt = new Date(now).toISOString();
       const updateResult = await client.query(
         `UPDATE auctions
          SET winner_user_id = $1,
