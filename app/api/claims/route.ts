@@ -23,11 +23,14 @@
 
 import { NextResponse } from "next/server"; // NextRequest not needed — using getSession() for auth
 import { randomUUID } from "crypto";
-import { withConnection } from "@/lib/db";
+import { withConnection, query } from "@/lib/db";
 import { computePrice, votesToTier, tierDelaySeconds } from "@/lib/price";
 import { getSession } from "@/lib/auth";
 import type { ClaimRequest, ClaimResponse, AuctionStateResponse } from "@/lib/types";
 import type { AuctionDecayParams, PauseWindow } from "@/lib/price";
+
+// Allow headroom for the server-side tier delay (up to 5s) plus settlement.
+export const maxDuration = 30;
 
 // Platform pseudo-user wallet that receives listing fees + commissions.
 const PLATFORM_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -85,6 +88,24 @@ export async function POST(
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const idempotencyKey = rawKey && UUID_RE.test(rawKey) ? rawKey : randomUUID();
 
+  // Enforce the tier delay BEFORE opening a transaction. Holding a pooled
+  // connection (max 20) or a long-open DSQL txn across a 5s sleep would starve
+  // the pool and inflate OCC aborts. Quick auto-committed read for the tier,
+  // sleep outside any txn, then transact. tier 1 = 5s, tier 2 = 2s, tier 3 = 0.
+  const preVotes = await query<{ count: string }>(
+    `SELECT COUNT(*) as count FROM votes WHERE auction_id = $1 AND user_id = $2`,
+    [auctionId, userId]
+  );
+  const preTier = votesToTier(parseInt(preVotes.rows[0]?.count ?? "0", 10));
+  if (preTier === 0) {
+    return NextResponse.json({ error: "No votes — cannot claim" }, { status: 403 });
+  }
+  const preDelayS = tierDelaySeconds(preTier);
+  if (preDelayS > 0) {
+    await new Promise((r) => setTimeout(r, preDelayS * 1000));
+  }
+
+  // Timestamp AFTER the delay — the claim is evaluated at the moment it lands.
   const now = Date.now();
 
   try {
@@ -228,15 +249,9 @@ export async function POST(
         await client.query("ROLLBACK");
         throw Object.assign(new Error("No votes — cannot claim"), { code: 403 });
       }
+      // (Tier delay already enforced before this transaction was opened.)
 
-      const delayS = tierDelaySeconds(tier);
-      const auctionElapsedS = (now - new Date(a.starts_at).getTime()) / 1000;
-      if (auctionElapsedS < delayS) {
-        await client.query("ROLLBACK");
-        throw Object.assign(new Error(`Tier delay: wait ${(delayS - auctionElapsedS).toFixed(1)}s`), { code: 425 });
-      }
-
-      // ── Wallet balance check ─���────────────────────────────────────────────
+      // ── Wallet balance check ──────────────────────────────────────────────
       const walletResult = await client.query<{ balance: string }>(
         `SELECT balance FROM wallets WHERE user_id = $1`,
         [userId]

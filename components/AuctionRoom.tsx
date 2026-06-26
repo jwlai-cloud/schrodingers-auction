@@ -20,7 +20,7 @@ interface AuctionRoomProps {
   initialVotes?: number;
 }
 
-type ClaimState = "idle" | "countdown" | "submitting" | "won" | "lost";
+type ClaimState = "idle" | "submitting" | "won" | "lost";
 
 const REACTIONS = ["🔥", "👀", "💀", "🤑"] as const;
 
@@ -126,38 +126,17 @@ export function AuctionRoom({ auction, serverTimeMs, initialVotes = 0 }: Auction
 
   // ── Claim ─────────────────────────────────────────────────────────────────
   const [claimState, setClaimState] = useState<ClaimState>("idle");
-  const [claimCountdown, setClaimCountdown] = useState(0);
   const [finalPrice, setFinalPrice] = useState(0);
   const [lossInfo, setLossInfo] = useState<{ winnerName: string; beatenByMs: number } | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function handleClaim() {
     if (!user) { setShowAuth(true); return; }
     if (tier === 0 || claimState !== "idle") return;
-
-    const price = priceResult.price;
-    setFinalPrice(price);
-
-    if (claimDelay === 0) {
-      // Instant — fire immediately
-      setClaimState("submitting");
-      submitClaim();
-      return;
-    }
-
-    // Countdown, then fire
-    setClaimCountdown(claimDelay);
-    setClaimState("countdown");
-    let remaining = claimDelay;
-    intervalRef.current = setInterval(() => {
-      remaining -= 1;
-      setClaimCountdown(remaining);
-      if (remaining <= 0) {
-        clearInterval(intervalRef.current!);
-        setClaimState("submitting");
-        submitClaim();
-      }
-    }, 1000);
+    setFinalPrice(priceResult.price);
+    // Submit immediately. The SERVER enforces the tier delay (5s/2s) before
+    // accepting a tier 1/2 claim — no bypassable client-side countdown.
+    setClaimState("submitting");
+    submitClaim();
   }
 
   async function submitClaim() {
@@ -188,9 +167,7 @@ export function AuctionRoom({ auction, serverTimeMs, initialVotes = 0 }: Auction
   }
 
   function resetClaim() {
-    if (intervalRef.current) clearInterval(intervalRef.current);
     setClaimState("idle");
-    setClaimCountdown(0);
     setLossInfo(null);
   }
 
@@ -679,21 +656,12 @@ export function AuctionRoom({ auction, serverTimeMs, initialVotes = 0 }: Auction
                 </>
               )}
 
-              {claimState === "countdown" && (
-                <div className="text-center py-2">
-                  <p className="font-mono text-5xl font-bold text-amber animate-pulse-slow">
-                    {claimCountdown}
-                  </p>
-                  <p className="text-muted-foreground text-xs mt-2 font-mono">
-                    enforcing {claimDelay}s tier delay&hellip;
-                  </p>
-                </div>
-              )}
-
               {claimState === "submitting" && (
                 <div className="text-center py-3">
                   <p className="font-mono text-muted-foreground text-sm animate-pulse-slow">
-                    Submitting claim&hellip;
+                    {claimDelay > 0
+                      ? `Claiming — enforcing your ${claimDelay}s tier delay…`
+                      : "Submitting claim…"}
                   </p>
                 </div>
               )}

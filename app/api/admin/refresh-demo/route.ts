@@ -10,7 +10,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { withConnection } from "@/lib/db";
-import { actsToPauseWindows, armedToBrakeLevel } from "@/lib/price";
+import { actsToPauseWindows } from "@/lib/price";
 import { isAdmin } from "@/lib/adminAuth";
 import { DEMO_ITEMS, DEMO_SELLER_ID } from "@/lib/demoData";
 
@@ -37,19 +37,19 @@ export async function POST(req: NextRequest) {
     );
     await client.query("COMMIT");
 
-    for (const [itemIdx, item] of DEMO_ITEMS.entries()) {
+    for (const item of DEMO_ITEMS) {
       // Stagger near the top of the curve (0–40% down) so items stay live and
       // visibly falling. The 20-min cron + decay carries some to the floor.
       const frac = Math.random() * 0.4;
       const startsAt = new Date(Date.now() - Math.floor(frac * item.durationS * 1000));
-      // Ambient armed demand (real bot voters) so the room looks alive from the
-      // start. The brake is baked in from launch (burn_effective = starts_at) to
-      // match that demand — no mid-auction discontinuity.
-      const armedN = 10 + Math.floor(Math.random() * 26); // 10–35 bidders
-      const burnLevel = armedToBrakeLevel(armedN);
-      const burnEffective = burnLevel > 0 ? startsAt.toISOString() : null;
-      // Act 1 reveals immediately (votable on entry); acts 2/3 unlock at 15%/30%.
-      const revealOffsets = [0, 0.15, 0.3].map((f) => Math.floor(item.durationS * f));
+      // Brake starts at 0 — real armed demand drives it up LIVE (votes route +
+      // triggered bot surges ratchet it). No static pre-seed: a fixed high count
+      // before anyone arms read as fake and never moved.
+      const burnLevel = 0;
+      const burnEffective = null;
+      // Small ABSOLUTE reveal offsets so demo arming is fast: act 1 now, act 2 +10s,
+      // act 3 +20s. Real seller listings (/sell) keep the slower 25/50/75% reveal.
+      const revealOffsets = [0, 10, 20];
       const pauseWindows = actsToPauseWindows(revealOffsets);
 
       // One transaction per item: clear prior-cycle data, relist, acts, bot demand.
@@ -98,58 +98,8 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // ── Ambient armed demand: armedN real bot voters, batched (3–4 statements). ──
-      // Distribution: ~55% fully armed (3 votes), ~30% (2), ~15% (1). Deterministic
-      // bot ids are reused across cycles (ON CONFLICT DO NOTHING) — no row growth.
-      const userRows: string[] = [], userParams: unknown[] = [];
-      const walletRows: string[] = [], walletParams: unknown[] = [];
-      const voteRows: string[] = [], voteParams: unknown[] = [item.id]; // $1 = auction_id
-      const lotteryRows: string[] = [], lotteryParams: unknown[] = [item.id]; // $1 = auction_id
-      let up = 0, wp = 0, vp = 1, lp = 1;
-      for (let k = 0; k < armedN; k++) {
-        // All-hex, fixed-width tail → always a valid UUID regardless of item count.
-        const bid = `b07b0000-0000-4000-8000-${String(itemIdx).padStart(3, "0")}${String(k).padStart(9, "0")}`;
-        userRows.push(`($${++up},$${++up},$${++up},'BOT')`);
-        userParams.push(bid, `bot${itemIdx}_${k}@bots.sca`, `bidder_${k}`);
-        walletRows.push(`($${++wp},50000)`);
-        walletParams.push(bid);
-        const r = Math.random();
-        const v = r < 0.55 ? 3 : r < 0.85 ? 2 : 1;
-        for (let act = 1; act <= v; act++) {
-          voteRows.push(`(gen_random_uuid(),$1,$${++vp},$${++vp})`);
-          voteParams.push(bid, act);
-        }
-        if (v === 3) {
-          lotteryRows.push(`(gen_random_uuid(),$1,$${++lp})`);
-          lotteryParams.push(bid);
-        }
-      }
-      // Guard: never emit `VALUES ` with no rows (would be a SQL syntax error).
-      if (userRows.length > 0) {
-        await client.query(
-          `INSERT INTO users (id, email, display_name, region_code) VALUES ${userRows.join(",")} ON CONFLICT (id) DO NOTHING`,
-          userParams
-        );
-        await client.query(
-          `INSERT INTO wallets (user_id, balance) VALUES ${walletRows.join(",")} ON CONFLICT (user_id) DO NOTHING`,
-          walletParams
-        );
-      }
-      if (voteRows.length > 0) {
-        await client.query(
-          `INSERT INTO votes (id, auction_id, user_id, act_no) VALUES ${voteRows.join(",")}`,
-          voteParams
-        );
-      }
-      if (lotteryRows.length > 0) {
-        await client.query(
-          `INSERT INTO lottery_entries (id, auction_id, user_id) VALUES ${lotteryRows.join(",")}`,
-          lotteryParams
-        );
-      }
-
       await client.query("COMMIT");
-      results.push(`relisted ${item.id} (armed ${armedN}, brake ${burnLevel}, ${item.floorAction})`);
+      results.push(`relisted ${item.id} (${item.floorAction})`);
     }
   });
 
