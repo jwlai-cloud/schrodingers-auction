@@ -1,7 +1,7 @@
 # Architecture
 
-> **Stack:** Next.js (v0-scaffolded) on Vercel · **Amazon Aurora DSQL** (multi-region,
-> active-active) · Edge-cached aggregate polling for realtime feel.
+> **Stack:** Next.js (v0-scaffolded) on Vercel · **Amazon Aurora DSQL** (strongly
+> consistent; active-active multi-region-capable, demo runs a single us-east-1 cluster) · Edge-cached aggregate polling for realtime feel.
 
 ## The three architectural theses
 
@@ -18,10 +18,12 @@
    Only votes, reactions, and claims write to DSQL.
 
 3. **Strong consistency is the product, not the plumbing.** The fairness promise —
-   one global price, one true armed counter, exactly one winner — is only honest with
-   multi-region strongly consistent writes. That is precisely Aurora DSQL's
-   active-active guarantee. DynamoDB global tables replicate asynchronously across
-   regions and could double-award a claim; we ruled it out for that reason.
+   one price, one true armed counter, exactly one winner — is only honest with
+   strongly consistent writes. That is precisely Aurora DSQL's guarantee, and it holds
+   active-active across regions when you scale out. DynamoDB global tables replicate
+   asynchronously across regions and could double-award a claim; we ruled it out for
+   that reason. (This demo runs a single us-east-1 cluster; the guarantee is identical,
+   region-local.)
 
 ---
 
@@ -46,12 +48,10 @@ flowchart TB
         end
     end
 
-    subgraph DSQL["Amazon Aurora DSQL (active-active multi-region)"]
-        R1[("Region A endpoint")]
-        R2[("Region B endpoint")]
+    subgraph DSQL["Amazon Aurora DSQL (strongly consistent · active-active multi-region capable · demo: single us-east-1)"]
+        R1[("us-east-1 endpoint")]
         DATA["auctions · acts · votes · reactions\nclaims · wallets · ledger_entries\nauction_rollups"]
         R1 --- DATA
-        R2 --- DATA
     end
 
     CRON["Vercel Cron (1s–5s)\nrollup refresher + floor-lottery draw"]
@@ -60,14 +60,14 @@ flowchart TB
     EDGE -->|"cache miss (~1 rps/auction)"| AGG
     B1 & B2 & B3 -->|"writes only on intent"| VOTE & REACT & CLAIM
     AGG & VOTE & REACT & CLAIM & SELL --> R1
-    CLAIM -.->|"claims from far regions\nhit nearest endpoint"| R2
+    CLAIM -.->|"concurrent claims serialize —\nexactly one commits, rest abort (OCC)"| R1
     CRON --> R1
 ```
 
-**The demo money-shot this enables:** two browsers in two regions claim the same item
+**The demo money-shot this enables:** two browsers claim the same item
 in the same second — DSQL commits exactly one, and the loser instantly sees the
 "you were 0.4s away" receipt. No coordination service, no locks, no queue: one SQL
-transaction.
+transaction. (The same guarantee holds active-active across regions when scaled out.)
 
 ---
 

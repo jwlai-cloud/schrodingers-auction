@@ -18,13 +18,11 @@ flowchart TB
         → POST /api/admin/refresh-demo (HTTPS)"]
     end
 
-    subgraph DSQL["Amazon Aurora DSQL — active-active multi-region, strongly consistent"]
-        RA[("Region A endpoint")]
-        RB[("Region B endpoint")]
+    subgraph DSQL["Amazon Aurora DSQL — strongly consistent (active-active multi-region capable · demo: single us-east-1 cluster)"]
+        RA[("us-east-1 endpoint")]
         T["auctions · acts · votes · reactions · claims
         wallets · ledger_entries · auction_rollups"]
         RA --- T
-        RB --- T
     end
 
     B1 -->|"poll 1s"| EDGE
@@ -38,7 +36,6 @@ flowchart TB
     AGG --> RA
     VOTE --> RA
     REACT --> RA
-    CLAIM --> RA
-    CLAIM -.->|"far-region claims hit nearest endpoint —
-    exactly one commit wins"| RB
+    CLAIM -.->|"concurrent claims serialize —
+    exactly one commit wins, rest abort (OCC)"| RA
     REFRESH --> RA
