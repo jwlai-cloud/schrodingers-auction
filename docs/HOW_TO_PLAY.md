@@ -136,8 +136,9 @@ No votes? Still part of the show:
 - **One price, everywhere.** The price is a deterministic function of published
   auction parameters and server time — not a per-region feed that can drift.
 - **One winner, ever.** The claim is a single conditional transaction in a strongly
-  consistent, multi-region database (Amazon Aurora DSQL). Simultaneous claims from
-  different continents cannot both succeed — the database, not a race, decides.
+  consistent database (Amazon Aurora DSQL — active-active multi-region-capable; this
+  demo runs a single us-east-1 cluster). Simultaneous claims cannot both succeed —
+  the database, not a race, decides.
 - **The armed counter is real.** Votes are individually recorded, deduplicated per
   account per act, and aggregated with strong consistency. The number you panic
   about is the truth.

@@ -123,7 +123,7 @@ curl -X POST https://<your-app>/api/admin/seed -H "x-admin-secret: $ADMIN_SECRET
 |---|---|---|
 | Frontend | Next.js 14 (App Router), Tailwind CSS, scaffolded with v0 | Hackathon stack |
 | Deployment | Vercel | Edge network + seamless Next.js integration |
-| Database | **Amazon Aurora DSQL** | Active-active multi-region, strongly consistent SQL, serverless — the one-winner guarantee *is* the product |
+| Database | **Amazon Aurora DSQL** | Strongly consistent, serverless SQL (active-active multi-region-capable; demo runs a single us-east-1 cluster) — the one-winner guarantee *is* the product |
 | Auth | Custom session cookies + bcrypt | No third-party dependency; session stored in Aurora DSQL |
 | Price ticker | Pure client-side function (`lib/price.ts`) | Same params + server clock → identical price on every device, no DB reads |
 | Realtime feel | 500ms client polling + server clock offset | A million viewers never touch the database for price reads |
@@ -134,9 +134,9 @@ curl -X POST https://<your-app>/api/admin/seed -H "x-admin-secret: $ADMIN_SECRET
 
 ### Why Aurora DSQL
 
-The claim transaction requires **strong consistency across regions** — two simultaneous claims must not both succeed. Aurora DSQL's active-active replication with OCC (optimistic concurrency control) gives us:
+The claim transaction requires **strong consistency** — two simultaneous claims must not both succeed. Aurora DSQL's strongly-consistent OCC (optimistic concurrency control) — active-active across regions when scaled out — gives us:
 
-1. A single `UPDATE ... WHERE winner_user_id IS NULL` that commits in exactly one region, aborting the other with a serialization conflict.
+1. A single `UPDATE ... WHERE winner_user_id IS NULL` that commits exactly once, aborting any concurrent claim with a serialization conflict.
 2. The abort *is* the loser receipt — no polling, no separate lock table.
 3. Votes are insert-only rows (no hot row updates), avoiding OCC conflicts on the ledger.
 

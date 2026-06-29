@@ -23,7 +23,7 @@ Deadline: June 29, 2026, 5:00 pm PDT.
 > earn claim rights by watching the seller's highlight reveals, the worldwide count
 > of "armed" bidders is displayed with strong consistency, and exactly one claim ever
 > succeeds — enforced by a single guarded `UPDATE ... WHERE winner_user_id IS NULL`
-> transaction in Aurora DSQL's active-active multi-region engine. Sellers list without
+> transaction in Aurora DSQL's strongly-consistent engine (active-active multi-region-capable; this demo runs a single us-east-1 cluster). Sellers list without
 > streaming; the mechanism sells for them.
 
 ## 3-minute video storyboard
@@ -33,7 +33,7 @@ Deadline: June 29, 2026, 5:00 pm PDT.
 | 0:00–0:20 | Hook | Price ticking down over an item; armed counter at 47 | "Dutch auctions are a century old — and informationally dead. Nothing happens until the one moment something happens. We put the room back in." |
 | 0:20–0:50 | Problem | Listing form, no camera required | "Live shopping proved drops sell — if you'll perform on camera for hours. Schrödinger's Auction is the drop platform for sellers with no audience and no camera." |
 | 0:50–1:30 | Gameplay | Act reveal → spotlight pause → vote → tier badge → emoji bursts → demand-HOLD badge (price slows as demand rises) | "Bidders earn claim rights with attention, not money. Everyone sees the same price and the same armed count — everywhere on Earth." |
-| 1:30–2:10 | The money shot | Trigger the admin bot race (or two browsers): simultaneous claims. One wins; the loser screen names the real winner + the real millisecond gap ("342ms. fast_fingers was faster."). | "Two continents, one millisecond apart. Aurora DSQL's multi-region strong consistency commits exactly one claim — the serialization conflict is the game's referee." |
+| 1:30–2:10 | The money shot | Trigger the admin bot race (or two browsers): simultaneous claims. One wins; the loser screen names the real winner + the real millisecond gap ("342ms. fast_fingers was faster."). | "Two browsers, one millisecond apart. Aurora DSQL's strong consistency commits exactly one claim — the serialization conflict is the game's referee." |
 | 2:10–2:35 | Business | Settlement receipt: sale price, 5% base, 10% spread bonus, seller net | "Visible demand makes buyers claim earlier and higher. Sellers earn more; our spread fee grows with theirs. Engagement is the revenue model." |
 | 2:35–3:00 | Architecture | Architecture diagram; /admin DB browser; price formula | "Price never touches the database. One guarded UPDATE decides everything. Schrödinger's Auction — until it's claimed, it's every price at once." |
 
