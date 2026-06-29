@@ -1,9 +1,13 @@
 name: Refresh demo auctions
 
 # Keeps the live demo lobby fresh: every 20 min, re-list the catalogue items
-# with staggered start times so prices always sit mid-curve. This only TRIGGERS
-# the work over HTTPS — the Vercel app holds the AWS DSQL credentials and does
-# the database writes. The Action needs only ADMIN_SECRET.
+# with staggered start times so prices always sit mid-curve, THEN arm a surge of
+# bots on a few hero items so the DEMAND HOLD brake is always visible to judges.
+# This only TRIGGERS the work over HTTPS — the Vercel app holds the AWS DSQL
+# credentials and does the database writes. The Action needs only ADMIN_SECRET.
+#
+# Note: the surge is dynamic (real bot votes inserted each cycle, brake ratchets
+# via the normal path), not a static pre-seed. It is re-applied after every relist.
 on:
   schedule:
     - cron: "*/20 * * * *"
@@ -29,3 +33,26 @@ jobs:
           cat /tmp/refresh.json || true
           echo
           test "$code" = "200"
+
+      - name: Surge demo bots (arm-only)
+        env:
+          ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
+          APP_URL: https://schrodingers-auction.vercel.app
+        run: |
+          # Arm ~10 bots on a few hero items so DEMAND HOLD (×0.75) shows when
+          # judges look. claim=false → bots only vote; no item is consumed.
+          # Tolerant: a single item failing (e.g. already at floor) must not fail
+          # the job. Runs only after the relist step above succeeds.
+          for id in \
+            11111111-0000-0000-0000-000000000002 \
+            11111111-0000-0000-0000-000000000004 \
+            11111111-0000-0000-0000-000000000006; do
+            code=$(curl -sS -o /tmp/surge.json -w "%{http_code}" -X POST \
+              -H "content-type: application/json" \
+              -H "x-admin-secret: $ADMIN_SECRET" \
+              -d "{\"auctionId\":\"$id\",\"count\":10,\"claim\":false}" \
+              "$APP_URL/api/admin/bots")
+            echo "surge $id -> HTTP $code"
+            cat /tmp/surge.json || true
+            echo
+          done
